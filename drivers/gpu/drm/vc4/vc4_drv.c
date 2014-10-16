@@ -56,6 +56,8 @@ vc4_drm_load(struct drm_device *dev, unsigned long flags)
 	if (!vc4)
 		return -ENOMEM;
 
+	INIT_LIST_HEAD(&vc4->overflow_list);
+
 	dev_set_drvdata(dev->dev, dev);
 	vc4->dev = dev;
 	dev->dev_private = vc4;
@@ -101,10 +103,16 @@ static const struct drm_ioctl_desc vc4_drm_ioctls[] = {
 static struct drm_driver vc4_drm_driver = {
 	.driver_features = (DRIVER_MODESET |
 			    DRIVER_GEM |
+			    DRIVER_HAVE_IRQ |
 			    DRIVER_PRIME),
 	.load = vc4_drm_load,
 	.unload = vc4_drm_unload,
 	.set_busid = drm_platform_set_busid,
+
+	.irq_handler = vc4_irq,
+	.irq_preinstall = vc4_irq_preinstall,
+	.irq_postinstall = vc4_irq_postinstall,
+	.irq_uninstall = vc4_irq_uninstall,
 
 #if defined(CONFIG_DEBUG_FS)
 	.debugfs_init = vc4_debugfs_init,
