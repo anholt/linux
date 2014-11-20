@@ -56,8 +56,6 @@ vc4_drm_load(struct drm_device *dev, unsigned long flags)
 	if (!vc4)
 		return -ENOMEM;
 
-	INIT_LIST_HEAD(&vc4->overflow_list);
-
 	dev_set_drvdata(dev->dev, dev);
 	vc4->dev = dev;
 	dev->dev_private = vc4;
@@ -67,6 +65,8 @@ vc4_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = component_bind_all(dev->dev, dev);
 	if (ret)
 		return ret;
+
+	vc4_gem_init(dev);
 
 	vc4_kms_load(dev);
 
