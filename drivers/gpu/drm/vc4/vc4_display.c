@@ -81,6 +81,11 @@ vc4_connector_best_encoder(struct drm_connector *connector)
 	return vc4_attached_encoder(connector);
 }
 
+static struct vc4_params params = {
+	.width = 1680,
+	.height = 1050
+};
+
 static int
 vc4_connector_get_modes(struct drm_connector *connector)
 {
@@ -90,7 +95,8 @@ vc4_connector_get_modes(struct drm_connector *connector)
 	/* XXX This is the resolution that the firmware is
 	 * detecting for the monitor on my desk.
 	 */
-	mode = drm_gtf_mode(dev, 1680, 1050, 60, false, false);
+	mode = drm_gtf_mode(dev, params.width, params.height, 60, false, false);
+	DRM_INFO("Using resolution %dx%d@60\n", params.width, params.height);
 
 	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
 
@@ -417,3 +423,9 @@ vc4_modeset_init(struct drm_device *dev)
 	return 0;
 }
 
+
+module_param_named(width, params.width, int, 0444);
+MODULE_PARM_DESC(width, "Display width (default 1680)");
+
+module_param_named(height, params.height, int, 0444);
+MODULE_PARM_DESC(height, "Display height (default 1050)");

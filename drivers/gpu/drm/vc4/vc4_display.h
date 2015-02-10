@@ -36,6 +36,11 @@ struct vc4_crtc {
 	struct drm_crtc base;
 };
 
+struct vc4_params {
+	int width;
+	int height;
+};
+
 #define to_vc4_crtc(x) container_of(x, struct vc4_crtc, base)
 #define to_vc4_connector(x) container_of(x, struct vc4_connector, base)
 #define to_vc4_encoder(x) container_of(x, struct vc4_encoder, base)
