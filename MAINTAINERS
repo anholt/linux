@@ -2128,6 +2128,13 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/rpi/linux-rpi.git
 S:	Maintained
 N:	bcm2835
 
+BROADCOM BCM2836 ARM ARCHITECTURE
+M:	Eric Anholt <eric@anholt.net>
+L:	linux-rpi-kernel@lists.infradead.org (moderated for non-subscribers)
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/rpi/linux-rpi.git
+S:	Maintained
+N:	bcm2836
+
 BROADCOM BCM33XX MIPS ARCHITECTURE
 M:	Kevin Cernekee <cernekee@gmail.com>
 L:	linux-mips@linux-mips.org
