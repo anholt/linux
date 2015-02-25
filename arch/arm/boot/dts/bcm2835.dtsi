@@ -74,6 +74,11 @@
 			#power-domain-cells = <1>;
 		};
 
+		mailbox-property {
+			compatible = "brcm,bcm2835-mbox-property";
+			mboxes = <&mailbox 8>;
+		};
+
 		gpio: gpio@7e200000 {
 			compatible = "brcm,bcm2835-gpio";
 			reg = <0x7e200000 0xb4>;
