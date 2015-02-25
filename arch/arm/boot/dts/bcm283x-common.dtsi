@@ -1,3 +1,4 @@
+#include <dt-bindings/arm/bcm2835_mbox_power.h>
 /include/ "skeleton.dtsi"
 
 / {
@@ -70,6 +71,12 @@
 			#mbox-cells = <1>;
 		};
 
+		pm_domains: pm_domains0 {
+			compatible = "brcm,bcm2835-mbox-power";
+			mboxes = <&mailbox 0>;
+			#power-domain-cells = <1>;
+		};
+
 		uart@7e201000 {
 			compatible = "brcm,bcm2835-pl011", "arm,pl011", "arm,primecell";
 			reg = <0x7e201000 0x1000>;
@@ -132,6 +139,7 @@
 			compatible = "brcm,bcm2835-usb";
 			reg = <0x7e980000 0x10000>;
 			interrupts = <1 9>;
+			power-domains = <&pm_domains POWER_DOMAIN_USB>;
 		};
 	};
 
