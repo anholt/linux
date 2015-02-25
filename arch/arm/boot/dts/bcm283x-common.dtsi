@@ -63,6 +63,13 @@
 			#interrupt-cells = <2>;
 		};
 
+		mailbox: mailbox@7e00b800 {
+			compatible = "brcm,bcm2835-mbox";
+			reg = <0x7e00b880 0x40>;
+			interrupts = <0 1>;
+			#mbox-cells = <1>;
+		};
+
 		uart@7e201000 {
 			compatible = "brcm,bcm2835-pl011", "arm,pl011", "arm,primecell";
 			reg = <0x7e201000 0x1000>;
