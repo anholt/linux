@@ -1,0 +1,14 @@
+Broadcom BCM2835 VideoCore mailbox property channel IPC
+
+Required properties:
+
+- compatible:	Should be "brcm,bcm2835-mbox-property"
+- mboxes:	Single-entry list which specifies which mailbox controller
+		  and channel is the property channel.
+
+Example:
+
+mailbox-property {
+	compatible = "brcm,bcm2835-mbox-property";
+	mboxes = <&mailbox 8>
+};
