@@ -1,0 +1,14 @@
+Broadcom BCM2835 VideoCore mailbox power domain driver
+
+Required properties:
+
+- compatible:	Should be "brcm,bcm2835-mbox-power"
+- mboxes:	Single-entry list which specifies which mailbox controller
+		  and channel is the power channel.
+
+Example:
+
+mailbox-power {
+	compatible = "brcm,bcm2835-mbox-power";
+	mboxes = <&mailbox 0>
+};
