@@ -116,6 +116,8 @@ config ARCH_BCM2835
 	select CLKSRC_OF
 	select PINCTRL
 	select PINCTRL_BCM2835
+	select PM_GENERIC_DOMAINS if PM
+	select PM_GENERIC_DOMAINS_OF if PM
 	help
 	  This enables support for the Broadcom BCM2835 SoC. This SoC is
 	  used in the Raspberry Pi and Roku 2 devices.
