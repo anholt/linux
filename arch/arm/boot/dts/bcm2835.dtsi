@@ -1,5 +1,6 @@
 /include/ "skeleton.dtsi"
 #include <dt-bindings/arm/bcm2835_mbox_power.h>
+#include <dt-bindings/gpio/gpio.h>
 
 / {
 	compatible = "brcm,bcm2835";
@@ -190,6 +191,7 @@
 			reg = <0x7e902000 0x600>;
 			interrupts = <2 8>, <2 9>;
 			ddc = <&i2c2>;
+			hpd-gpio = <&gpio 46 GPIO_ACTIVE_HIGH>;
 			crtc = <&pv2>;
 		};
 
