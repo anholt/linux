@@ -327,7 +327,13 @@ struct mbox_chan *mbox_request_channel(struct mbox_client *cl, int index)
 
 	of_node_put(spec.np);
 
-	if (!chan || chan->cl || !try_module_get(mbox->dev->driver->owner)) {
+	if (!chan) {
+		dev_dbg(dev, "%s: mailbox not registered yet\n", __func__);
+		mutex_unlock(&con_mutex);
+		return ERR_PTR(-EPROBE_DEFER);
+	}
+
+	if (chan->cl || !try_module_get(mbox->dev->driver->owner)) {
 		dev_dbg(dev, "%s: mailbox not free\n", __func__);
 		mutex_unlock(&con_mutex);
 		return ERR_PTR(-EBUSY);
