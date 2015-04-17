@@ -67,8 +67,9 @@
 			compatible = "brcm,bcm2835-pl011", "arm,pl011", "arm,primecell";
 			reg = <0x7e201000 0x1000>;
 			interrupts = <2 25>;
-			clock-frequency = <3000000>;
 			arm,primecell-periphid = <0x00241011>;
+			clocks = <&uart0_clk>, <&apb_pclk>;
+			clock-names = "uartclk", "apb_pclk";
 		};
 
 		i2s: i2s@7e203000 {
@@ -154,6 +155,20 @@
 			#clock-cells = <0>;
 			clock-output-names = "spi";
 			clock-frequency = <250000000>;
+		};
+
+		apb_pclk: apb_pclk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-output-names = "apb_pclk";
+			clock-frequency = <126000000>;
+		};
+
+		uart0_clk: uart0_clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-output-names = "uart0_clk";
+			clock-frequency = <3000000>;
 		};
 	};
 };
