@@ -56,7 +56,7 @@
 #include "irqchip.h"
 
 /* Put the bank and irq (32 bits) into the hwirq */
-#define MAKE_HWIRQ(b, n)	((b << 5) | (n))
+#define MAKE_HWIRQ(b, n)	(((b) << 5) | (n))
 #define HWIRQ_BANK(i)		(i >> 5)
 #define HWIRQ_BIT(i)		BIT(i & 0x1f)
 
@@ -76,6 +76,24 @@
 #define NR_BANKS		3
 #define IRQS_PER_BANK		32
 
+#define LOCAL_PM_ROUTING_SET		0x010
+#define LOCAL_PM_ROUTING_CLR		0x014
+#define LOCAL_TIMER_INT_CONTROL0	0x040
+#define LOCAL_IRQ_PENDING0		0x060
+#define LOCAL_MAILBOX0_CLR0		0x0c0
+
+#define LOCAL_IRQ_BASE		(3 * NR_BANKS)
+#define LOCAL_IRQ_CNTPSIRQ	(LOCAL_IRQ_BASE + 0)
+#define LOCAL_IRQ_CNTPNSIRQ	(LOCAL_IRQ_BASE + 1)
+#define LOCAL_IRQ_CNTHPIRQ	(LOCAL_IRQ_BASE + 2)
+#define LOCAL_IRQ_CNTVIRQ	(LOCAL_IRQ_BASE + 3)
+#define LOCAL_IRQ_MAILBOX0	(LOCAL_IRQ_BASE + 4)
+#define LOCAL_IRQ_MAILBOX1	(LOCAL_IRQ_BASE + 5)
+#define LOCAL_IRQ_MAILBOX2	(LOCAL_IRQ_BASE + 6)
+#define LOCAL_IRQ_MAILBOX3	(LOCAL_IRQ_BASE + 7)
+#define LOCAL_IRQ_GPU_FAST	(LOCAL_IRQ_BASE + 8)
+#define LOCAL_IRQ_PMU_FAST	(LOCAL_IRQ_BASE + 9)
+
 static int reg_pending[] __initconst = { 0x00, 0x04, 0x08 };
 static int reg_enable[] __initconst = { 0x18, 0x10, 0x14 };
 static int reg_disable[] __initconst = { 0x24, 0x1c, 0x20 };
@@ -91,21 +109,60 @@ struct armctrl_ic {
 	void __iomem *pending[NR_BANKS];
 	void __iomem *enable[NR_BANKS];
 	void __iomem *disable[NR_BANKS];
+
+	void __iomem *local_base;
+
 	struct irq_domain *domain;
+	bool is_2836;
 };
 
 static struct armctrl_ic intc __read_mostly;
 static void __exception_irq_entry bcm2835_handle_irq(
 	struct pt_regs *regs);
+static void __exception_irq_entry bcm2836_handle_irq(
+	struct pt_regs *regs);
+
+static void
+armctrl_mask_per_cpu_irq(unsigned int reg, unsigned int bit)
+{
+	void __iomem *reg_base = intc.local_base + reg;
+	unsigned int i;
+	for (i = 0; i < 4; i++)
+		writel(readl(reg_base + 4 * i) & ~bit, reg_base + 4 * i);
+}
+
+static void
+armctrl_unmask_per_cpu_irq(unsigned int reg, unsigned int bit)
+{
+	void __iomem *reg_base = intc.local_base + reg;
+	unsigned int i;
+	for (i = 0; i < 4; i++)
+		writel(readl(reg_base + 4 * i) | bit, reg_base + 4 * i);
+}
 
 static void armctrl_mask_irq(struct irq_data *d)
 {
-	writel_relaxed(HWIRQ_BIT(d->hwirq), intc.disable[HWIRQ_BANK(d->hwirq)]);
+	if (d->irq == LOCAL_IRQ_PMU_FAST) {
+		writel(0xf, intc.local_base + LOCAL_PM_ROUTING_CLR);
+	} else if (d->irq >= LOCAL_IRQ_CNTPSIRQ) {
+		armctrl_mask_per_cpu_irq(LOCAL_TIMER_INT_CONTROL0,
+					 d->irq - LOCAL_IRQ_CNTPSIRQ);
+	} else {
+		writel_relaxed(HWIRQ_BIT(d->hwirq),
+			       intc.disable[HWIRQ_BANK(d->hwirq)]);
+	}
 }
 
 static void armctrl_unmask_irq(struct irq_data *d)
 {
-	writel_relaxed(HWIRQ_BIT(d->hwirq), intc.enable[HWIRQ_BANK(d->hwirq)]);
+	if (d->irq == LOCAL_IRQ_PMU_FAST) {
+		writel(0xf, intc.local_base + LOCAL_PM_ROUTING_SET);
+	} else if (d->irq >= LOCAL_IRQ_CNTPSIRQ) {
+		armctrl_unmask_per_cpu_irq(LOCAL_TIMER_INT_CONTROL0,
+					   d->irq - LOCAL_IRQ_CNTPSIRQ);
+	} else {
+		writel_relaxed(HWIRQ_BIT(d->hwirq), intc.enable[HWIRQ_BANK(d->hwirq)]);
+	}
 }
 
 static struct irq_chip armctrl_chip = {
@@ -114,6 +171,12 @@ static struct irq_chip armctrl_chip = {
 	.irq_unmask = armctrl_unmask_irq
 };
 
+static bool
+is_valid_bank3_irq(int irq)
+{
+	return intc.is_2836 && (irq < 4 || irq == 5 || irq == 9);
+}
+
 static int armctrl_xlate(struct irq_domain *d, struct device_node *ctrlr,
 	const u32 *intspec, unsigned int intsize,
 	unsigned long *out_hwirq, unsigned int *out_type)
@@ -121,13 +184,16 @@ static int armctrl_xlate(struct irq_domain *d, struct device_node *ctrlr,
 	if (WARN_ON(intsize != 2))
 		return -EINVAL;
 
-	if (WARN_ON(intspec[0] >= NR_BANKS))
+	if (WARN_ON(intspec[0] >= NR_BANKS + 1))
 		return -EINVAL;
 
 	if (WARN_ON(intspec[1] >= IRQS_PER_BANK))
 		return -EINVAL;
 
 	if (WARN_ON(intspec[0] == 0 && intspec[1] >= NR_IRQS_BANK0))
+		return -EINVAL;
+
+	if (WARN_ON(intspec[0] == 3 && !is_valid_bank3_irq(intspec[1])))
 		return -EINVAL;
 
 	*out_hwirq = MAKE_HWIRQ(intspec[0], intspec[1]);
@@ -139,8 +205,7 @@ static struct irq_domain_ops armctrl_ops = {
 	.xlate = armctrl_xlate
 };
 
-static int __init armctrl_of_init(struct device_node *node,
-	struct device_node *parent)
+static void __init armctrl_of_init(struct device_node *node)
 {
 	void __iomem *base;
 	int irq, b, i;
@@ -149,11 +214,6 @@ static int __init armctrl_of_init(struct device_node *node,
 	if (!base)
 		panic("%s: unable to map IC registers\n",
 			node->full_name);
-
-	intc.domain = irq_domain_add_linear(node, MAKE_HWIRQ(NR_BANKS, 0),
-			&armctrl_ops, NULL);
-	if (!intc.domain)
-		panic("%s: unable to create IRQ domain\n", node->full_name);
 
 	for (b = 0; b < NR_BANKS; b++) {
 		intc.pending[b] = base + reg_pending[b];
@@ -168,8 +228,52 @@ static int __init armctrl_of_init(struct device_node *node,
 			set_irq_flags(irq, IRQF_VALID | IRQF_PROBE);
 		}
 	}
+}
 
+static int __init armctrl_2835_of_init(struct device_node *node,
+	struct device_node *parent)
+{
+	intc.domain = irq_domain_add_linear(node, MAKE_HWIRQ(NR_BANKS, 0),
+			&armctrl_ops, NULL);
+	if (!intc.domain)
+		panic("%s: unable to create IRQ domain\n", node->full_name);
+
+	armctrl_of_init(node);
 	set_handle_irq(bcm2835_handle_irq);
+	return 0;
+}
+
+static int __init armctrl_2836_of_init(struct device_node *node,
+	struct device_node *parent)
+{
+	int irq, i;
+
+	intc.is_2836 = true;
+
+	intc.local_base = of_iomap(node, 1);
+	if (!intc.local_base)
+		panic("%s: unable to map local interrupt registers\n",
+			node->full_name);
+
+	intc.domain = irq_domain_add_linear(node, MAKE_HWIRQ(NR_BANKS + 1, 0),
+			&armctrl_ops, NULL);
+	if (!intc.domain)
+		panic("%s: unable to create IRQ domain\n", node->full_name);
+
+	armctrl_of_init(node);
+
+	/* Bank 3 local interrupts */
+	for (i = 0; i < 9; i++) {
+		if (!is_valid_bank3_irq(i))
+			continue;
+
+		irq = irq_create_mapping(intc.domain, MAKE_HWIRQ(3, i));
+		irq_set_percpu_devid(irq);
+		irq_set_chip_and_handler(irq, &armctrl_chip,
+					 handle_percpu_devid_irq);
+	}
+
+	set_handle_irq(bcm2836_handle_irq);
 	return 0;
 }
 
@@ -196,8 +300,7 @@ static void armctrl_handle_shortcut(int bank, struct pt_regs *regs,
 	handle_IRQ(irq_linear_revmap(intc.domain, irq), regs);
 }
 
-static void __exception_irq_entry bcm2835_handle_irq(
-	struct pt_regs *regs)
+static void bcm283x_handle_gpu_irq(struct pt_regs *regs)
 {
 	u32 stat, irq;
 
@@ -219,4 +322,34 @@ static void __exception_irq_entry bcm2835_handle_irq(
 	}
 }
 
-IRQCHIP_DECLARE(bcm2835_armctrl_ic, "brcm,bcm2835-armctrl-ic", armctrl_of_init);
+static void __exception_irq_entry bcm2835_handle_irq(
+	struct pt_regs *regs)
+{
+	bcm283x_handle_gpu_irq(regs);
+}
+
+static void __exception_irq_entry bcm2836_handle_irq(
+	struct pt_regs *regs)
+{
+ 	int cpu = smp_processor_id();
+	u32 stat;
+
+	stat = readl_relaxed(intc.local_base + LOCAL_IRQ_PENDING0 + 4 * cpu);
+	if (stat & 0x10) {
+		void __iomem *mailbox0 = (intc.local_base +
+					  LOCAL_MAILBOX0_CLR0 + 16 * cpu);
+		u32 mbox_val = readl(mailbox0);
+		u32 ipi = ffs(mbox_val) - 1;
+		writel(1 << ipi, mailbox0);
+		do_IPI(ipi, regs);
+	} else if (stat & 0x100) {
+		bcm283x_handle_gpu_irq(regs);
+	} else {
+		/* Local (bank3) interrupts */
+		u32 irq = MAKE_HWIRQ(3, ffs(stat) - 1);
+		handle_IRQ(irq_linear_revmap(intc.domain, irq), regs);
+	}
+}
+
+IRQCHIP_DECLARE(bcm2835_armctrl_ic, "brcm,bcm2835-armctrl-ic", armctrl_2835_of_init);
+IRQCHIP_DECLARE(bcm2836_armctrl_ic, "brcm,bcm2836-armctrl-ic", armctrl_2836_of_init);

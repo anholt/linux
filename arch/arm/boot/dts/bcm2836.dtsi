@@ -41,3 +41,8 @@
 		arm_freq = <&v7_cpu0>, "clock-frequency:0";
 	};
 };
+
+&intc {
+	compatible = "brcm,bcm2836-armctrl-ic";
+	reg = <0x7e00b200 0x200>, <0x40000000 0x100>;
+};
