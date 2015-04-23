@@ -209,11 +209,13 @@ static void __init armctrl_of_init(struct device_node *node)
 {
 	void __iomem *base;
 	int irq, b, i;
+	printk("of init!\n");
 
 	base = of_iomap(node, 0);
 	if (!base)
 		panic("%s: unable to map IC registers\n",
 			node->full_name);
+	printk("of mapped!\n");
 
 	for (b = 0; b < NR_BANKS; b++) {
 		intc.pending[b] = base + reg_pending[b];
@@ -228,18 +230,22 @@ static void __init armctrl_of_init(struct device_node *node)
 			set_irq_flags(irq, IRQF_VALID | IRQF_PROBE);
 		}
 	}
+	printk("of set chips!\n");
 }
 
 static int __init armctrl_2835_of_init(struct device_node *node,
 	struct device_node *parent)
 {
+	printk("2835 init!\n");
 	intc.domain = irq_domain_add_linear(node, MAKE_HWIRQ(NR_BANKS, 0),
 			&armctrl_ops, NULL);
 	if (!intc.domain)
 		panic("%s: unable to create IRQ domain\n", node->full_name);
+	printk("2835 domain added!\n");
 
 	armctrl_of_init(node);
 	set_handle_irq(bcm2835_handle_irq);
+	printk("2835 irq set!\n");
 	return 0;
 }
 
@@ -249,6 +255,8 @@ static int __init armctrl_2836_of_init(struct device_node *node,
 	int irq, i;
 
 	intc.is_2836 = true;
+
+	printk("2836 init!\n");
 
 	intc.local_base = of_iomap(node, 1);
 	if (!intc.local_base)
@@ -261,6 +269,7 @@ static int __init armctrl_2836_of_init(struct device_node *node,
 		panic("%s: unable to create IRQ domain\n", node->full_name);
 
 	armctrl_of_init(node);
+	printk("2836 of inited!\n");
 
 	/* Bank 3 local interrupts */
 	for (i = 0; i < 9; i++) {
@@ -272,8 +281,10 @@ static int __init armctrl_2836_of_init(struct device_node *node,
 		irq_set_chip_and_handler(irq, &armctrl_chip,
 					 handle_percpu_devid_irq);
 	}
+	printk("2836 chips set!\n");
 
 	set_handle_irq(bcm2836_handle_irq);
+	printk("2836 irq set!\n");
 	return 0;
 }
 
