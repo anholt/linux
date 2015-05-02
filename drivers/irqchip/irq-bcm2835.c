@@ -80,6 +80,7 @@
 #define LOCAL_PM_ROUTING_CLR		0x014
 #define LOCAL_TIMER_INT_CONTROL0	0x040
 #define LOCAL_IRQ_PENDING0		0x060
+#define LOCAL_MAILBOX0_SET0		0x080
 #define LOCAL_MAILBOX0_CLR0		0x0c0
 
 #define LOCAL_IRQ_BASE		(32 * NR_BANKS)
@@ -205,6 +206,24 @@ static struct irq_domain_ops armctrl_ops = {
 	.xlate = armctrl_xlate
 };
 
+#ifdef CONFIG_SMP
+static void armctrl_send_ipi(const struct cpumask *mask, unsigned int irq)
+{
+	int cpu;
+	void __iomem *mailbox0_base = intc.local_base + LOCAL_MAILBOX0_SET0;
+
+	/*
+	 * Ensure that stores to Normal memory are visible to the
+	 * other CPUs before issuing the IPI.
+	 */
+	dsb();
+
+	for_each_cpu(cpu, mask)	{
+		writel(1 << irq, mailbox0_base + 16 * cpu);
+	}
+}
+#endif
+
 static void __init armctrl_of_init(struct device_node *node)
 {
 	void __iomem *base;
@@ -282,6 +301,10 @@ static int __init armctrl_2836_of_init(struct device_node *node,
 					 handle_percpu_devid_irq);
 	}
 	printk("2836 chips set!\n");
+
+#ifdef CONFIG_SMP
+	set_smp_cross_call(armctrl_send_ipi);
+#endif
 
 	set_handle_irq(bcm2836_handle_irq);
 	printk("2836 irq set!\n");
