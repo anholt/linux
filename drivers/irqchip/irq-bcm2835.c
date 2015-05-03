@@ -79,6 +79,7 @@
 #define LOCAL_PM_ROUTING_SET		0x010
 #define LOCAL_PM_ROUTING_CLR		0x014
 #define LOCAL_TIMER_INT_CONTROL0	0x040
+#define LOCAL_MAILBOX_INT_CONTROL0	0x050
 #define LOCAL_IRQ_PENDING0		0x060
 #define LOCAL_MAILBOX0_SET0		0x080
 #define LOCAL_MAILBOX0_CLR0		0x0c0
@@ -303,6 +304,8 @@ static int __init armctrl_2836_of_init(struct device_node *node,
 	printk("2836 chips set!\n");
 
 #ifdef CONFIG_SMP
+	/* unmask IPIs */
+	armctrl_unmask_per_cpu_irq(LOCAL_MAILBOX_INT_CONTROL0, 1);
 	set_smp_cross_call(armctrl_send_ipi);
 #endif
 
