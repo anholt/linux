@@ -148,7 +148,7 @@ static void armctrl_mask_irq(struct irq_data *d)
 		writel(0xf, intc.local_base + LOCAL_PM_ROUTING_CLR);
 	} else if (d->irq >= LOCAL_IRQ_CNTPSIRQ) {
 		armctrl_mask_per_cpu_irq(LOCAL_TIMER_INT_CONTROL0,
-					 d->irq - LOCAL_IRQ_CNTPSIRQ);
+					BIT(d->irq - LOCAL_IRQ_CNTPSIRQ));
 	} else {
 		writel_relaxed(HWIRQ_BIT(d->hwirq),
 			       intc.disable[HWIRQ_BANK(d->hwirq)]);
@@ -161,7 +161,7 @@ static void armctrl_unmask_irq(struct irq_data *d)
 		writel(0xf, intc.local_base + LOCAL_PM_ROUTING_SET);
 	} else if (d->irq >= LOCAL_IRQ_CNTPSIRQ) {
 		armctrl_unmask_per_cpu_irq(LOCAL_TIMER_INT_CONTROL0,
-					   d->irq - LOCAL_IRQ_CNTPSIRQ);
+					BIT(d->irq - LOCAL_IRQ_CNTPSIRQ));
 	} else {
 		writel_relaxed(HWIRQ_BIT(d->hwirq), intc.enable[HWIRQ_BANK(d->hwirq)]);
 	}
