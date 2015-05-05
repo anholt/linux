@@ -79,10 +79,12 @@
 #define LOCAL_PM_ROUTING_SET		0x010
 #define LOCAL_PM_ROUTING_CLR		0x014
 #define LOCAL_TIMER_INT_CONTROL0	0x040
+#define LOCAL_MAILBOX_INT_CONTROL0	0x050
 #define LOCAL_IRQ_PENDING0		0x060
+#define LOCAL_MAILBOX0_SET0		0x080
 #define LOCAL_MAILBOX0_CLR0		0x0c0
 
-#define LOCAL_IRQ_BASE		(3 * NR_BANKS)
+#define LOCAL_IRQ_BASE		(IRQS_PER_BANK * NR_BANKS)
 #define LOCAL_IRQ_CNTPSIRQ	(LOCAL_IRQ_BASE + 0)
 #define LOCAL_IRQ_CNTPNSIRQ	(LOCAL_IRQ_BASE + 1)
 #define LOCAL_IRQ_CNTHPIRQ	(LOCAL_IRQ_BASE + 2)
@@ -142,11 +144,11 @@ armctrl_unmask_per_cpu_irq(unsigned int reg, unsigned int bit)
 
 static void armctrl_mask_irq(struct irq_data *d)
 {
-	if (d->irq == LOCAL_IRQ_PMU_FAST) {
+	if (d->hwirq == LOCAL_IRQ_PMU_FAST) {
 		writel(0xf, intc.local_base + LOCAL_PM_ROUTING_CLR);
-	} else if (d->irq >= LOCAL_IRQ_CNTPSIRQ) {
+	} else if (d->hwirq >= LOCAL_IRQ_CNTPSIRQ) {
 		armctrl_mask_per_cpu_irq(LOCAL_TIMER_INT_CONTROL0,
-					 d->irq - LOCAL_IRQ_CNTPSIRQ);
+					BIT(d->hwirq - LOCAL_IRQ_CNTPSIRQ));
 	} else {
 		writel_relaxed(HWIRQ_BIT(d->hwirq),
 			       intc.disable[HWIRQ_BANK(d->hwirq)]);
@@ -155,11 +157,11 @@ static void armctrl_mask_irq(struct irq_data *d)
 
 static void armctrl_unmask_irq(struct irq_data *d)
 {
-	if (d->irq == LOCAL_IRQ_PMU_FAST) {
+	if (d->hwirq == LOCAL_IRQ_PMU_FAST) {
 		writel(0xf, intc.local_base + LOCAL_PM_ROUTING_SET);
-	} else if (d->irq >= LOCAL_IRQ_CNTPSIRQ) {
+	} else if (d->hwirq >= LOCAL_IRQ_CNTPSIRQ) {
 		armctrl_unmask_per_cpu_irq(LOCAL_TIMER_INT_CONTROL0,
-					   d->irq - LOCAL_IRQ_CNTPSIRQ);
+					BIT(d->hwirq - LOCAL_IRQ_CNTPSIRQ));
 	} else {
 		writel_relaxed(HWIRQ_BIT(d->hwirq), intc.enable[HWIRQ_BANK(d->hwirq)]);
 	}
@@ -204,6 +206,24 @@ static int armctrl_xlate(struct irq_domain *d, struct device_node *ctrlr,
 static struct irq_domain_ops armctrl_ops = {
 	.xlate = armctrl_xlate
 };
+
+#ifdef CONFIG_SMP
+static void armctrl_send_ipi(const struct cpumask *mask, unsigned int irq)
+{
+	int cpu;
+	void __iomem *mailbox0_base = intc.local_base + LOCAL_MAILBOX0_SET0;
+
+	/*
+	 * Ensure that stores to Normal memory are visible to the
+	 * other CPUs before issuing the IPI.
+	 */
+	dsb();
+
+	for_each_cpu(cpu, mask)	{
+		writel(1 << irq, mailbox0_base + 16 * cpu);
+	}
+}
+#endif
 
 static void __init armctrl_of_init(struct device_node *node)
 {
@@ -282,6 +302,12 @@ static int __init armctrl_2836_of_init(struct device_node *node,
 					 handle_percpu_devid_irq);
 	}
 	printk("2836 chips set!\n");
+
+#ifdef CONFIG_SMP
+	/* unmask IPIs */
+	armctrl_unmask_per_cpu_irq(LOCAL_MAILBOX_INT_CONTROL0, 1);
+	set_smp_cross_call(armctrl_send_ipi);
+#endif
 
 	set_handle_irq(bcm2836_handle_irq);
 	printk("2836 irq set!\n");
