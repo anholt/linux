@@ -428,7 +428,7 @@ static int bcm2835_spi_probe(struct platform_device *pdev)
 	master->setup = bcm2835_spi_setup;
 	master->set_cs = bcm2835_spi_set_cs;
 	master->transfer_one = bcm2835_spi_transfer_one;
-	master->handle_err = bcm2835_spi_handle_err;
+	//master->handle_err = bcm2835_spi_handle_err;
 	master->dev.of_node = pdev->dev.of_node;
 
 	bs = spi_master_get_devdata(master);
