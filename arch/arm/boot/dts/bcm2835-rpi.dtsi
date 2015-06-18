@@ -1,4 +1,4 @@
-/include/ "bcm2835.dtsi"
+#include "bcm2835.dtsi"
 
 / {
 	/* This is left here in case u-boot needs it */
@@ -34,6 +34,12 @@
 		status = "disabled";
 	};
 
+	soc {
+		firmware: firmware {
+			compatible = "raspberrypi,firmware";
+			mboxes = <&mailbox>;
+		};
+	};
 	/* External sound card */
 	sound: sound {
 	};
@@ -109,4 +115,7 @@
 		act_led_trigger = <&act_led>,"linux,default-trigger";
 		audio = <&audio>,"status";
 	};
+
+&vc4 {
+	firmware = <&firmware>;
 };
