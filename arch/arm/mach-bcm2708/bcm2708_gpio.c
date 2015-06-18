@@ -306,7 +306,7 @@ static irqreturn_t bcm2708_gpio_interrupt(int irq, void *dev_id)
 
 static struct irqaction bcm2708_gpio_irq = {
 	.name = "BCM2708 GPIO catchall handler",
-	.flags = IRQF_DISABLED | IRQF_TIMER | IRQF_IRQPOLL,
+	.flags = IRQF_TIMER | IRQF_IRQPOLL,
 	.handler = bcm2708_gpio_interrupt,
 };
 

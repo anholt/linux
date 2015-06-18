@@ -305,7 +305,7 @@ int __init armctrl_init(void __iomem * base, unsigned int irq_start,
 		irq_set_chip(irq, &armctrl_chip);
 		irq_set_chip_data(irq, (void *)data);
 		irq_set_handler(irq, handle_level_irq);
-		set_irq_flags(irq, IRQF_VALID | IRQF_PROBE | IRQF_DISABLED);
+		set_irq_flags(irq, IRQF_VALID | IRQF_PROBE);
 	}
 
 	armctrl_pm_register(base, irq_start, resume_sources);
