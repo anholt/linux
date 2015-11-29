@@ -36,6 +36,7 @@ endif
 
 # BCM2835
 obj-$(CONFIG_ARCH_BCM2835)	+= board_bcm2835.o
+obj-$(CONFIG_RASPBERRYPI_POWER)	+= raspberrypi-power.o
 
 # BCM5301X
 obj-$(CONFIG_ARCH_BCM_5301X)	+= bcm_5301x.o
