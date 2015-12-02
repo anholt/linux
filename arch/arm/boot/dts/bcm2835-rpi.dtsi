@@ -77,5 +77,5 @@
 };
 
 &v3d {
-	power-domains = <&v3d_power>;
+	power-domains = <&power RPI_POWER_DOMAIN_V3D>;
 };
