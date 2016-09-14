@@ -3446,3 +3446,6 @@
 			     <GIC_PPI 10 IRQ_TYPE_LEVEL_LOW>;
 	};
 };
+
+#include "pm8994.dtsi"
+#include "pmi8994.dtsi"
