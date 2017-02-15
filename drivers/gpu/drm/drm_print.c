@@ -253,3 +253,19 @@ void drm_err(const char *format, ...)
 	va_end(args);
 }
 EXPORT_SYMBOL(drm_err);
+
+void drm_print_regset32(struct drm_printer *p, struct debugfs_regset32 *regset)
+{
+	int namelen = 0;
+	int i;
+
+	for (i = 0; i < regset->nregs; i++)
+		namelen = max(namelen, (int)strlen(regset->regs[i].name));
+
+	for (i = 0; i < regset->nregs; i++) {
+		drm_printf(p, "%*s = 0x%08x\n",
+			   namelen, regset->regs[i].name,
+			   readl(regset->base + regset->regs[i].offset));
+	}
+}
+EXPORT_SYMBOL(drm_print_regset32);
