@@ -79,20 +79,6 @@ void vc4_hvs_dump_state(struct drm_device *dev)
 	}
 }
 
-#ifdef CONFIG_DEBUG_FS
-int vc4_hvs_debugfs_regs(struct seq_file *m, void *unused)
-{
-	struct drm_info_node *node = (struct drm_info_node *)m->private;
-	struct drm_device *dev = node->minor->dev;
-	struct vc4_dev *vc4 = to_vc4_dev(dev);
-	struct drm_printer p = drm_seq_file_printer(m);
-
-	drm_print_regset32(&p, &vc4->hvs->regset);
-
-	return 0;
-}
-#endif
-
 /* The filter kernel is composed of dwords each containing 3 9-bit
  * signed integers packed next to each other.
  */
@@ -220,6 +206,8 @@ static int vc4_hvs_bind(struct device *dev, struct device *master, void *data)
 	dispctrl |= VC4_SET_FIELD(2, SCALER_DISPCTRL_DSP3_MUX);
 
 	HVS_WRITE(SCALER_DISPCTRL, dispctrl);
+
+	vc4_debugfs_add_regset32(drm, "hvs_regs", &hvs->regset);
 
 	return 0;
 }
