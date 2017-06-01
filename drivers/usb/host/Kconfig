@@ -798,3 +798,30 @@ config USB_HCD_TEST_MODE
 	  This option is of interest only to developers who need to validate
 	  their USB hardware designs.  It is not needed for normal use.  If
 	  unsure, say N.
+
+config BRCM_USB_OHCI
+       tristate
+
+config BRCM_USB_EHCI
+       tristate
+
+config BRCM_USB_XHCI
+       tristate
+
+config BRCM_USB_PHY
+       tristate
+
+config BRCM_USB
+	tristate "Broadcom STB USB support"
+	depends on ARCH_BRCMSTB || BMIPS_GENERIC
+	select BRCM_USB_OHCI if USB_OHCI_HCD
+	select BRCM_USB_EHCI if USB_EHCI_HCD
+	select BRCM_USB_XHCI if USB_XHCI_HCD
+	select BRCM_USB_PHY if USB_OHCI_HCD || USB_EHCI_HCD || USB_XHCI_HCD
+	select GENERIC_PHY if BRCM_USB_PHY
+	default ARCH_BRCMSTB || BMIPS_GENERIC
+	help
+	  Say Y to enable the drivers for the onchip USB controllers.
+
+	  If your chipset supports power management, disabling this driver
+	  will keep the device permanently powered down.
