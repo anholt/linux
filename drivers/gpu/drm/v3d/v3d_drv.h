@@ -7,6 +7,7 @@
 #include <drm/drm_encoder.h>
 #include <drm/drm_gem.h>
 #include <drm/gpu_scheduler.h>
+#include <drm/drm_simple_kms_helper.h>
 
 #define GMP_GRANULARITY (128 * 1024)
 
@@ -30,6 +31,11 @@ struct v3d_queue_state {
 
 struct v3d_dev {
 	struct drm_device drm;
+
+	struct drm_simple_display_pipe pipe;
+	struct drm_fbdev_cma *fbdev;
+	struct drm_connector connector;
+	struct timer_list vblank_timer;
 
 	/* Short representation (e.g. 33, 41) of the V3D tech version
 	 * and revision.

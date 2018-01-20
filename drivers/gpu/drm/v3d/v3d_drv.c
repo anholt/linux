@@ -20,7 +20,10 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <drm/drm_fb_cma_helper.h>
+#include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_fb_helper.h>
+#include <drm/drm_atomic_helper.h>
+#include <drm/drm_crtc_helper.h>
 
 #include "uapi/drm/v3d_drm.h"
 #include "v3d_drv.h"
@@ -32,6 +35,75 @@
 #define DRIVER_MAJOR 1
 #define DRIVER_MINOR 0
 #define DRIVER_PATCHLEVEL 0
+
+static int v3d_display_check(struct drm_simple_display_pipe *pipe,
+			       struct drm_plane_state *pstate,
+			       struct drm_crtc_state *cstate)
+{
+	return 0;
+}
+
+static void v3d_display_enable(struct drm_simple_display_pipe *pipe,
+			       struct drm_crtc_state *cstate,
+			       struct drm_plane_state *plane_state)
+{
+	struct drm_crtc *crtc = &pipe->crtc;
+
+	drm_crtc_vblank_on(crtc);
+}
+
+void v3d_display_disable(struct drm_simple_display_pipe *pipe)
+{
+	struct drm_crtc *crtc = &pipe->crtc;
+
+	drm_crtc_vblank_off(crtc);
+}
+
+static void v3d_display_update(struct drm_simple_display_pipe *pipe,
+				 struct drm_plane_state *old_pstate)
+{
+	struct drm_crtc *crtc = &pipe->crtc;
+	struct drm_pending_vblank_event *event = crtc->state->event;
+
+	if (event) {
+		crtc->state->event = NULL;
+
+		spin_lock_irq(&crtc->dev->event_lock);
+		if (crtc->state->active && drm_crtc_vblank_get(crtc) == 0)
+			drm_crtc_arm_vblank_event(crtc, event);
+		else
+			drm_crtc_send_vblank_event(crtc, event);
+		spin_unlock_irq(&crtc->dev->event_lock);
+	}
+}
+
+int v3d_enable_vblank(struct drm_simple_display_pipe *pipe)
+{
+	struct v3d_dev *v3d = to_v3d_dev(pipe->crtc.dev);
+
+	mod_timer(&v3d->vblank_timer, jiffies + msecs_to_jiffies(16));
+	return 0;
+}
+
+void v3d_disable_vblank(struct drm_simple_display_pipe *pipe)
+{
+}
+
+static int v3d_display_prepare_fb(struct drm_simple_display_pipe *pipe,
+				    struct drm_plane_state *plane_state)
+{
+	return drm_gem_fb_prepare_fb(&pipe->plane, plane_state);
+}
+
+static const struct drm_simple_display_pipe_funcs v3d_display_funcs = {
+	.check = v3d_display_check,
+	.enable = v3d_display_enable,
+	.disable = v3d_display_disable,
+	.update = v3d_display_update,
+	.prepare_fb = v3d_display_prepare_fb,
+	.enable_vblank = v3d_enable_vblank,
+	.disable_vblank = v3d_disable_vblank,
+};
 
 #ifdef CONFIG_PM
 static int v3d_runtime_suspend(struct device *dev)
@@ -187,11 +259,35 @@ static const struct vm_operations_struct v3d_vm_ops = {
 	.close = drm_gem_vm_close,
 };
 
+static int v3d_dumb_create(struct drm_file *file_priv,
+			   struct drm_device *drm,
+			   struct drm_mode_create_dumb *args)
+{
+	struct v3d_bo *bo;
+	int ret;
+
+	args->pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
+	args->size = args->pitch * args->height;
+
+	bo = v3d_bo_create(drm, file_priv, args->size);
+	if (IS_ERR(bo))
+		return PTR_ERR(bo);
+
+	ret = drm_gem_handle_create(file_priv, &bo->base, &args->handle);
+	drm_gem_object_put_unlocked(&bo->base);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static struct drm_driver v3d_drm_driver = {
 	.driver_features = (DRIVER_GEM |
 			    DRIVER_RENDER |
 			    DRIVER_PRIME |
-			    DRIVER_SYNCOBJ),
+			    DRIVER_SYNCOBJ |
+			    DRIVER_MODESET |
+			    DRIVER_ATOMIC),
 
 	.open = v3d_open,
 	.postclose = v3d_postclose,
@@ -202,6 +298,7 @@ static struct drm_driver v3d_drm_driver = {
 
 	.gem_free_object_unlocked = v3d_free_object,
 	.gem_vm_ops = &v3d_vm_ops,
+	.dumb_create = v3d_dumb_create,
 
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
@@ -239,6 +336,120 @@ map_regs(struct v3d_dev *v3d, void __iomem **regs, const char *name)
 
 	*regs = devm_ioremap_resource(v3d->dev, res);
 	return PTR_ERR_OR_ZERO(*regs);
+}
+static const struct drm_mode_config_funcs mode_config_funcs = {
+	.fb_create = drm_gem_fb_create,
+	.atomic_check = drm_atomic_helper_check,
+	.atomic_commit = drm_atomic_helper_commit,
+};
+
+static const u32 pixel_formats[] = {
+	DRM_FORMAT_ABGR8888,
+	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ARGB8888,
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_BGR565,
+	DRM_FORMAT_RGB565,
+	DRM_FORMAT_ABGR1555,
+	DRM_FORMAT_XBGR1555,
+	DRM_FORMAT_ARGB1555,
+	DRM_FORMAT_XRGB1555,
+	DRM_FORMAT_ABGR4444,
+	DRM_FORMAT_XBGR4444,
+	DRM_FORMAT_ARGB4444,
+	DRM_FORMAT_XRGB4444,
+};
+
+static void
+v3d_vblank(struct timer_list *t)
+{
+	struct v3d_dev *v3d = from_timer(v3d, t, vblank_timer);
+
+	drm_crtc_handle_vblank(&v3d->pipe.crtc);
+	mod_timer(&v3d->vblank_timer, jiffies + msecs_to_jiffies(16));
+}
+
+static enum drm_connector_status
+vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
+{
+	return connector_status_connected;
+}
+
+static void vc4_hdmi_connector_destroy(struct drm_connector *connector)
+{
+	drm_connector_unregister(connector);
+	drm_connector_cleanup(connector);
+}
+
+static const struct drm_connector_funcs vc4_hdmi_connector_funcs = {
+	.detect = vc4_hdmi_connector_detect,
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.destroy = vc4_hdmi_connector_destroy,
+	.reset = drm_atomic_helper_connector_reset,
+	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
+};
+
+static int vc4_hdmi_connector_get_modes(struct drm_connector *connector)
+{
+	int count;
+
+	count = drm_add_modes_noedid(connector, 1920, 1080);
+	drm_set_preferred_mode(connector, 1920, 1080);
+
+	return count;
+}
+
+static const struct drm_connector_helper_funcs vc4_hdmi_connector_helper_funcs = {
+	.get_modes = vc4_hdmi_connector_get_modes,
+};
+
+static void
+v3d_kms_init(struct v3d_dev *v3d)
+{
+	struct drm_device *dev = &v3d->drm;
+	struct drm_mode_config *mode_config;
+	struct drm_connector *connector = &v3d->connector;
+	int ret;
+
+	timer_setup(&v3d->vblank_timer, v3d_vblank, 0);
+
+	dev->irq_enabled = true;
+	drm_mode_config_init(dev);
+	mode_config = &dev->mode_config;
+	mode_config->funcs = &mode_config_funcs;
+	mode_config->min_width = 1;
+	mode_config->max_width = 1920;
+	mode_config->min_height = 1;
+	mode_config->max_height = 1080;
+
+	drm_connector_init(dev, connector, &vc4_hdmi_connector_funcs,
+			   DRM_MODE_CONNECTOR_HDMIA);
+	drm_connector_helper_add(connector, &vc4_hdmi_connector_helper_funcs);
+
+	connector->polled = (DRM_CONNECTOR_POLL_CONNECT |
+			     DRM_CONNECTOR_POLL_DISCONNECT);
+
+	connector->interlace_allowed = 1;
+	connector->doublescan_allowed = 0;
+
+	ret = drm_simple_display_pipe_init(dev, &v3d->pipe,
+					   &v3d_display_funcs,
+					   pixel_formats,
+					   ARRAY_SIZE(pixel_formats),
+					   NULL,
+					   connector);
+	if (ret)
+		DRM_ERROR("display pipe init failed\n");
+
+	ret = drm_vblank_init(dev, 1);
+	if (ret != 0) {
+		dev_err(dev->dev, "Failed to init vblank\n");
+		return;
+	}
+
+	drm_mode_config_reset(dev);
+	drm_kms_helper_poll_init(dev);
 }
 
 static int v3d_platform_drm_probe(struct platform_device *pdev)
@@ -306,6 +517,8 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 		goto dev_destroy;
 
 	v3d_irq_init(v3d);
+
+	v3d_kms_init(v3d);
 
 	ret = drm_dev_register(drm, 0);
 	if (ret)
