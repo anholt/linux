@@ -1013,7 +1013,7 @@ static int gic_irq_domain_translate(struct irq_domain *d,
 		*type = fwspec->param[2] & IRQ_TYPE_SENSE_MASK;
 
 		/* Make it clear that broken DTs are... broken */
-		WARN_ON(*type == IRQ_TYPE_NONE);
+		//WARN_ON(*type == IRQ_TYPE_NONE);
 		return 0;
 	}
 
