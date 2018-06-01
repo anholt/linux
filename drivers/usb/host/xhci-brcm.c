@@ -142,21 +142,9 @@ static int xhci_brcm_probe(struct platform_device *pdev)
 	device_property_read_u32(&pdev->dev, "imod-interval-ns",
 				 &xhci->imod_interval);
 
-	hcd->phy = devm_of_phy_get_by_index(&pdev->dev, pdev->dev.of_node, 0);
-	if (IS_ERR(hcd->phy)) {
-		ret = PTR_ERR(hcd->phy);
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "USB Phy not found.\n");
-		goto put_usb3_hcd;
-	} else {
-		ret = phy_init(hcd->phy);
-		if (ret)
-			goto put_usb3_hcd;
-	}
-
 	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (ret)
-		goto disable_usb_phy;
+		goto put_usb3_hcd;
 
 	ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
 	if (ret)
@@ -175,9 +163,6 @@ static int xhci_brcm_probe(struct platform_device *pdev)
 
 dealloc_usb2_hcd:
 	usb_remove_hcd(hcd);
-
-disable_usb_phy:
-	phy_exit(hcd->phy);
 
 put_usb3_hcd:
 	usb_put_hcd(xhci->shared_hcd);
@@ -207,7 +192,6 @@ static int xhci_brcm_remove(struct platform_device *dev)
 	usb_remove_hcd(hcd);
 	usb_put_hcd(xhci->shared_hcd);
 
-	phy_exit(hcd->phy);
 	clk_disable(xhci->clk);
 	usb_put_hcd(hcd);
 
