@@ -154,11 +154,6 @@
 			no-map;
 		};
 
-		slpi_region: slpi@90b00000 {
-			reg = <0x0 0x90b00000 0x0 0xa00000>;
-			no-map;
-		};
-
 		venus_region: venus@90400000 {
 			reg = <0x0 0x90400000 0x0 0x700000>;
 			no-map;
