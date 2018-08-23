@@ -452,6 +452,21 @@ v3d_kms_init(struct v3d_dev *v3d)
 	drm_kms_helper_poll_init(dev);
 }
 
+static void
+v3d_tweak_clock(struct device *dev)
+{
+	u32 *ptr = ioremap(0x8160050, 4);
+	if (!ptr) {
+		dev_err(dev, "Failed to map clock reg\n");
+		return;
+	}
+
+	dev_info(dev, "Setting clock to 600Mhz\n");
+	*ptr = 0xc;
+
+	iounmap(ptr);
+}
+
 static int v3d_platform_drm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -504,6 +519,8 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_set_autosuspend_delay(dev, 50);
 	pm_runtime_enable(dev);
+
+	v3d_tweak_clock(dev);
 
 	ret = drm_dev_init(&v3d->drm, &v3d_drm_driver, dev);
 	if (ret)
