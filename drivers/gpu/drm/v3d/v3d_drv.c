@@ -184,10 +184,15 @@ static int v3d_get_param_ioctl(struct drm_device *dev, void *data,
 		return 0;
 	}
 
-	/* Any params that aren't just register reads would go here. */
 
-	DRM_DEBUG("Unknown parameter %d\n", args->param);
-	return -EINVAL;
+	switch (args->param) {
+	case DRM_V3D_PARAM_SUPPORTS_TFU:
+		args->value = 1;
+		return 0;
+	default:
+		DRM_DEBUG("Unknown parameter %d\n", args->param);
+		return -EINVAL;
+	}
 }
 
 static int
@@ -251,6 +256,7 @@ static const struct drm_ioctl_desc v3d_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(V3D_MMAP_BO, v3d_mmap_bo_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(V3D_GET_PARAM, v3d_get_param_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(V3D_GET_BO_OFFSET, v3d_get_bo_offset_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(V3D_SUBMIT_TFU, v3d_submit_tfu_ioctl, DRM_RENDER_ALLOW | DRM_AUTH),
 };
 
 static const struct vm_operations_struct v3d_vm_ops = {
