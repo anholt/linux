@@ -68,6 +68,8 @@ enum _pmux_input {
 	NUM_OF_PMUX_INPUTS
 };
 
+#define DIV_2_THRESHOLD		600000000
+
 static const u8 prim_pll_regs[PLL_OFF_MAX_REGS] = {
        [PLL_OFF_L_VAL] = 0x04,
        [PLL_OFF_ALPHA_VAL] = 0x08,
@@ -95,10 +97,11 @@ static const u8 alt_pll_regs[PLL_OFF_MAX_REGS] = {
 
 static const struct alpha_pll_config hfpll_config = {
 	.l = 60,
-	.config_ctl_val = 0x200d4828,
+	.config_ctl_val = 0x200d4aa8,
 	.config_ctl_hi_val = 0x006,
 	.pre_div_mask = BIT(12),
 	.post_div_mask = 0x3 << 8,
+	.post_div_val = 0x1 << 8,
 	.main_output_mask = BIT(0),
 	.early_output_mask = BIT(3),
 };
@@ -140,7 +143,7 @@ static const struct alpha_pll_config altpll_config = {
 	.vco_mask = 0x3 << 20,
 	.config_ctl_val = 0x4001051b,
 	.post_div_mask = 0x3 << 8,
-	.post_div_val = 0x1,
+	.post_div_val = 0x1 << 8,
 	.main_output_mask = BIT(0),
 	.early_output_mask = BIT(3),
 };
@@ -181,6 +184,7 @@ struct clk_cpu_8996_mux {
 	u8	width;
 	struct notifier_block nb;
 	struct clk_hw	*pll;
+	struct clk_hw	*pll_div_2;
 	struct clk_regmap clkr;
 };
 
@@ -226,6 +230,13 @@ clk_cpu_8996_mux_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 	struct clk_cpu_8996_mux *cpuclk = to_clk_cpu_8996_mux_hw(hw);
 	struct clk_hw *parent = cpuclk->pll;
 
+	if (cpuclk->pll_div_2 && req->rate < DIV_2_THRESHOLD) {
+		if (req->rate < (DIV_2_THRESHOLD / 2))
+			return -EINVAL;
+
+		parent = cpuclk->pll_div_2;
+	}
+
 	req->best_parent_rate = clk_hw_round_rate(parent, req->rate);
 	req->best_parent_hw = parent;
 
@@ -237,13 +248,19 @@ int cpu_clk_notifier_cb(struct notifier_block *nb, unsigned long event,
 {
 	int ret;
 	struct clk_cpu_8996_mux *cpuclk = to_clk_cpu_8996_mux_nb(nb);
+	struct clk_notifier_data *cnd = data;
 
 	switch (event) {
 	case PRE_RATE_CHANGE:
 		ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw, ALT_INDEX);
 		break;
 	case POST_RATE_CHANGE:
-		ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw, PLL_INDEX);
+		if (cnd->new_rate < DIV_2_THRESHOLD)
+			ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw,
+							  DIV_2_INDEX);
+		else
+			ret = clk_cpu_8996_mux_set_parent(&cpuclk->clkr.hw,
+							  PLL_INDEX);
 		break;
 	default:
 		ret = 0;
@@ -295,6 +312,7 @@ static struct clk_cpu_8996_mux pwrcl_pmux = {
 	.shift = 0,
 	.width = 2,
 	.pll = &pwrcl_pll.clkr.hw,
+	.pll_div_2 = &pwrcl_smux.clkr.hw,
 	.nb.notifier_call = cpu_clk_notifier_cb,
 	.clkr.hw.init = &(struct clk_init_data) {
 		.name = "pwrcl_pmux",
@@ -315,6 +333,7 @@ static struct clk_cpu_8996_mux perfcl_pmux = {
 	.shift = 0,
 	.width = 2,
 	.pll = &perfcl_pll.clkr.hw,
+	.pll_div_2 = &perfcl_smux.clkr.hw,
 	.nb.notifier_call = cpu_clk_notifier_cb,
 	.clkr.hw.init = &(struct clk_init_data) {
 		.name = "perfcl_pmux",
