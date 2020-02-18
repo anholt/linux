@@ -1436,7 +1436,7 @@ static const struct adreno_gpu_funcs funcs = {
 	.get_timestamp = a5xx_get_timestamp,
 };
 
-static void check_speed_bin(struct device *dev)
+static int check_speed_bin(struct device *dev)
 {
 	struct nvmem_cell *cell;
 	u32 val;
@@ -1463,9 +1463,13 @@ static void check_speed_bin(struct device *dev)
 		}
 
 		nvmem_cell_put(cell);
+	} else if (PTR_ERR(cell) == -EPROBE_DEFER) {
+		return -EPROBE_DEFER;
 	}
 
 	dev_pm_opp_set_supported_hw(dev, &val, 1);
+
+	return 0;
 }
 
 struct msm_gpu *a5xx_gpu_init(struct drm_device *dev)
@@ -1482,6 +1486,10 @@ struct msm_gpu *a5xx_gpu_init(struct drm_device *dev)
 		return ERR_PTR(-ENXIO);
 	}
 
+	ret = check_speed_bin(&pdev->dev);
+	if (ret)
+		return ERR_PTR(ret);
+
 	a5xx_gpu = kzalloc(sizeof(*a5xx_gpu), GFP_KERNEL);
 	if (!a5xx_gpu)
 		return ERR_PTR(-ENOMEM);
@@ -1493,8 +1501,6 @@ struct msm_gpu *a5xx_gpu_init(struct drm_device *dev)
 	adreno_gpu->reg_offsets = a5xx_register_offsets;
 
 	a5xx_gpu->lm_leakage = 0x4E001A;
-
-	check_speed_bin(&pdev->dev);
 
 	ret = adreno_gpu_init(dev, pdev, adreno_gpu, &funcs, 4);
 	if (ret) {
