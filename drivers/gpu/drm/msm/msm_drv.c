@@ -1277,15 +1277,15 @@ static int msm_pdev_probe(struct platform_device *pdev)
 	struct component_match *match = NULL;
 	int ret;
 
+	ret = add_gpu_components(&pdev->dev, &match);
+	if (ret)
+		goto fail;
+
 	if (get_mdp_ver(pdev)) {
 		ret = add_display_components(&pdev->dev, &match);
 		if (ret)
 			return ret;
 	}
-
-	ret = add_gpu_components(&pdev->dev, &match);
-	if (ret)
-		goto fail;
 
 	/* on all devices that I am aware of, iommu's which can map
 	 * any address the cpu can see are used:
