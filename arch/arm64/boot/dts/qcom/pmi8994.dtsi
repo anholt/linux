@@ -32,7 +32,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			pmi8994_s2: s2@1700 {
+			vreg_pmi8994_s2: s2@1700 {
 				reg = <0x1700 0x100>;
 				status = "ok";
 				regulator-min-microvolt = <400000>;
