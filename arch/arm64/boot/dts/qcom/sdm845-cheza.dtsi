@@ -636,13 +636,8 @@ ap_ts_i2c: &i2c14 {
 	status = "okay";
 };
 
-/*
- * Cheza fw does not properly program the GPU aperture to allow the
- * GPU to update the SMMU pagetables for context switches.  Work
- * around this by dropping the "qcom,adreno-smmu" compat string.
- */
-&adreno_smmu {
-	compatible = "qcom,sdm845-smmu-v2", "qcom,smmu-v2";
+&mdss_mdp {
+	status = "okay";
 };
 
 &mss_pil {
