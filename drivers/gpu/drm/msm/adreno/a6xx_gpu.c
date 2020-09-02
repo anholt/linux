@@ -766,6 +766,12 @@ static int a6xx_hw_init(struct msm_gpu *gpu)
 		if (!a6xx_idle(gpu, gpu->rb[0]))
 			return -EINVAL;
 	} else if (ret == -ENODEV) {
+		static bool first = true;
+		if (first) {
+			void __iomem *reg = ioremap(0x05060000, 0x1000);
+			writeq(0x48000, reg); /* offset of cb0 from gpu's base */
+			iounmap(reg);
+		}
 		/*
 		 * This device does not use zap shader (but print a warning
 		 * just in case someone got their dt wrong.. hopefully they
