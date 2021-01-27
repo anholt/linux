@@ -58,7 +58,9 @@ int a6xx_gmu_wait_for_idle(struct a6xx_gmu *gmu);
 
 bool a6xx_gmu_isidle(struct a6xx_gmu *gmu);
 
-int a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state);
+int _a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state, char *file, int line);
+#define a6xx_gmu_set_oob(gmu, state) _a6xx_gmu_set_oob(gmu, state, __FILE__, __LINE__)
+
 void a6xx_gmu_clear_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state);
 
 int a6xx_gmu_init(struct a6xx_gpu *a6xx_gpu, struct device_node *node);

@@ -245,7 +245,7 @@ static int a6xx_gmu_hfi_start(struct a6xx_gmu *gmu)
 }
 
 /* Trigger a OOB (out of band) request to the GMU */
-int a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state)
+int _a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state, char *file, int line)
 {
 	int ret;
 	u32 val;
@@ -286,7 +286,8 @@ int a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state)
 
 	if (ret)
 		DRM_DEV_ERROR(gmu->dev,
-			"Timeout waiting for GMU OOB set %s: 0x%x\n",
+			"%s:%d Timeout waiting for GMU OOB set %s: 0x%x\n",
+			file, line,
 				name,
 				gmu_read(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO));
 
