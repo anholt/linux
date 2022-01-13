@@ -159,6 +159,10 @@
 	};
 };
 
+&usb {
+	dr_mode = "host";
+};
+
 &blsp_dma {
 	status = "okay";
 };
