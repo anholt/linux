@@ -413,24 +413,21 @@ struct drm_encoder *mdp4_lcdc_encoder_init(struct drm_device *dev,
 	/* TODO: different regulators in other cases? */
 	reg = devm_regulator_get(dev->dev, "lvds-vccs-3p3v");
 	if (IS_ERR(reg)) {
-		ret = PTR_ERR(reg);
-		DRM_DEV_ERROR(dev->dev, "failed to get lvds-vccs-3p3v: %d\n", ret);
+		ret = dev_err_probe(dev->dev, PTR_ERR(reg), "failed to get lvds-vccs-3p3v\n");
 		goto fail;
 	}
 	mdp4_lcdc_encoder->regs[0] = reg;
 
 	reg = devm_regulator_get(dev->dev, "lvds-pll-vdda");
 	if (IS_ERR(reg)) {
-		ret = PTR_ERR(reg);
-		DRM_DEV_ERROR(dev->dev, "failed to get lvds-pll-vdda: %d\n", ret);
+		ret = dev_err_probe(dev->dev, PTR_ERR(reg), "failed to get lvds-pll-vdda\n");
 		goto fail;
 	}
 	mdp4_lcdc_encoder->regs[1] = reg;
 
 	reg = devm_regulator_get(dev->dev, "lvds-vdda");
 	if (IS_ERR(reg)) {
-		ret = PTR_ERR(reg);
-		DRM_DEV_ERROR(dev->dev, "failed to get lvds-vdda: %d\n", ret);
+		ret = dev_err_probe(dev->dev, PTR_ERR(reg), "failed to get lvds-vdda\n");
 		goto fail;
 	}
 	mdp4_lcdc_encoder->regs[2] = reg;

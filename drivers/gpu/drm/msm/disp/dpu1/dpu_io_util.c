@@ -32,9 +32,9 @@ int msm_dss_get_clk(struct device *dev, struct dss_clk *clk_arry, int num_clk)
 		clk_arry[i].clk = clk_get(dev, clk_arry[i].clk_name);
 		rc = PTR_ERR_OR_ZERO(clk_arry[i].clk);
 		if (rc) {
-			DEV_ERR("%pS->%s: '%s' get failed. rc=%d\n",
-				__builtin_return_address(0), __func__,
-				clk_arry[i].clk_name, rc);
+			dev_err_probe(dev, rc, "%pS->%s: '%s' get failed.\n",
+				      __builtin_return_address(0), __func__,
+				      clk_arry[i].clk_name);
 			goto error;
 		}
 	}

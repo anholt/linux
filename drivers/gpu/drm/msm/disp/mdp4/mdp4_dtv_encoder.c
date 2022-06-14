@@ -191,15 +191,15 @@ struct drm_encoder *mdp4_dtv_encoder_init(struct drm_device *dev)
 
 	mdp4_dtv_encoder->hdmi_clk = devm_clk_get(dev->dev, "hdmi_clk");
 	if (IS_ERR(mdp4_dtv_encoder->hdmi_clk)) {
-		DRM_DEV_ERROR(dev->dev, "failed to get hdmi_clk\n");
-		ret = PTR_ERR(mdp4_dtv_encoder->hdmi_clk);
+		ret = dev_err_probe(dev->dev, PTR_ERR(mdp4_dtv_encoder->hdmi_clk),
+				    "failed to get hdmi_clk\n");
 		goto fail;
 	}
 
 	mdp4_dtv_encoder->mdp_clk = devm_clk_get(dev->dev, "tv_clk");
 	if (IS_ERR(mdp4_dtv_encoder->mdp_clk)) {
-		DRM_DEV_ERROR(dev->dev, "failed to get tv_clk\n");
-		ret = PTR_ERR(mdp4_dtv_encoder->mdp_clk);
+		ret = dev_err_probe(dev->dev, PTR_ERR(mdp4_dtv_encoder->mdp_clk),
+				    "failed to get tv_clk\n");
 		goto fail;
 	}
 

@@ -110,7 +110,10 @@ struct clk *msm_clk_get(struct platform_device *pdev, const char *name)
 	char name2[32];
 
 	clk = devm_clk_get(&pdev->dev, name);
-	if (!IS_ERR(clk) || PTR_ERR(clk) == -EPROBE_DEFER)
+	if (PTR_ERR(clk) == -EPROBE_DEFER)
+		return ERR_PTR(dev_err_probe(&pdev->dev, -EPROBE_DEFER,
+					     "failed to get clock %s\n", name));
+	if (!IS_ERR(clk))
 		return clk;
 
 	snprintf(name2, sizeof(name2), "%s_clk", name);

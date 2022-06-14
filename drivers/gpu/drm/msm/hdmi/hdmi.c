@@ -164,7 +164,7 @@ static struct hdmi *msm_hdmi_init(struct platform_device *pdev)
 
 	ret = devm_regulator_bulk_get(&pdev->dev, config->hpd_reg_cnt, hdmi->hpd_regs);
 	if (ret) {
-		DRM_DEV_ERROR(&pdev->dev, "failed to get hpd regulator: %d\n", ret);
+		dev_err_probe(&pdev->dev, ret, "failed to get hpd regulator\n");
 		goto fail;
 	}
 
@@ -179,7 +179,7 @@ static struct hdmi *msm_hdmi_init(struct platform_device *pdev)
 
 	ret = devm_regulator_bulk_get(&pdev->dev, config->pwr_reg_cnt, hdmi->pwr_regs);
 	if (ret) {
-		DRM_DEV_ERROR(&pdev->dev, "failed to get pwr regulator: %d\n", ret);
+		dev_err_probe(&pdev->dev, ret, "failed to get pwr regulator\n");
 		goto fail;
 	}
 
@@ -196,9 +196,8 @@ static struct hdmi *msm_hdmi_init(struct platform_device *pdev)
 
 		clk = msm_clk_get(pdev, config->hpd_clk_names[i]);
 		if (IS_ERR(clk)) {
-			ret = PTR_ERR(clk);
-			DRM_DEV_ERROR(&pdev->dev, "failed to get hpd clk: %s (%d)\n",
-					config->hpd_clk_names[i], ret);
+			ret = dev_err_probe(&pdev->dev, PTR_ERR(clk), "failed to get hpd clk: %s\n",
+					    config->hpd_clk_names[i]);
 			goto fail;
 		}
 
@@ -218,9 +217,9 @@ static struct hdmi *msm_hdmi_init(struct platform_device *pdev)
 
 		clk = msm_clk_get(pdev, config->pwr_clk_names[i]);
 		if (IS_ERR(clk)) {
-			ret = PTR_ERR(clk);
-			DRM_DEV_ERROR(&pdev->dev, "failed to get pwr clk: %s (%d)\n",
-					config->pwr_clk_names[i], ret);
+			ret = dev_err_probe(&pdev->dev, PTR_ERR(clk),
+					    "failed to get pwr clk: %s\n",
+					    config->pwr_clk_names[i]);
 			goto fail;
 		}
 
@@ -553,7 +552,8 @@ static int msm_hdmi_bind(struct device *dev, struct device *master, void *data)
 		gpiod = devm_gpiod_get_optional(dev, name, GPIOD_ASIS);
 		/* This will catch e.g. -PROBE_DEFER */
 		if (IS_ERR(gpiod))
-			return PTR_ERR(gpiod);
+			return dev_err_probe(dev, PTR_ERR(gpiod),
+					     "getting HDMI gpio %s\n", name);
 		if (!gpiod) {
 			/* Try a second time, stripping down the name */
 			char name3[32];
@@ -565,8 +565,12 @@ static int msm_hdmi_bind(struct device *dev, struct device *master, void *data)
 			 */
 			if (sscanf(name, "qcom,hdmi-tx-%s", name3))
 				gpiod = devm_gpiod_get_optional(dev, name3, GPIOD_ASIS);
-			if (IS_ERR(gpiod))
-				return PTR_ERR(gpiod);
+			if (IS_ERR(gpiod)) {
+				return dev_err_probe(
+					dev, PTR_ERR(gpiod),
+					"getting stripped HDMI gpio %s\n",
+					name);
+			}
 			if (!gpiod)
 				DBG("failed to get gpio: %s", name);
 		}

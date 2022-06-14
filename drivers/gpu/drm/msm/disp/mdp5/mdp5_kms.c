@@ -539,10 +539,8 @@ static int get_clk(struct platform_device *pdev, struct clk **clkp,
 {
 	struct device *dev = &pdev->dev;
 	struct clk *clk = msm_clk_get(pdev, name);
-	if (IS_ERR(clk) && mandatory) {
-		DRM_DEV_ERROR(dev, "failed to get %s (%ld)\n", name, PTR_ERR(clk));
-		return PTR_ERR(clk);
-	}
+	if (IS_ERR(clk) && mandatory)
+		return dev_err_probe(dev, PTR_ERR(clk), "failed to get %s\n", name);
 	if (IS_ERR(clk))
 		DBG("skipping %s", name);
 	else

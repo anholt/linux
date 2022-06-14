@@ -451,8 +451,8 @@ struct msm_kms *mdp4_kms_init(struct drm_device *dev)
 
 	mdp4_kms->clk = devm_clk_get(&pdev->dev, "core_clk");
 	if (IS_ERR(mdp4_kms->clk)) {
-		DRM_DEV_ERROR(dev->dev, "failed to get core_clk\n");
-		ret = PTR_ERR(mdp4_kms->clk);
+		ret = dev_err_probe(dev->dev, PTR_ERR(mdp4_kms->clk),
+				    "failed to get core_clk\n");
 		goto fail;
 	}
 
@@ -462,8 +462,8 @@ struct msm_kms *mdp4_kms_init(struct drm_device *dev)
 
 	mdp4_kms->axi_clk = devm_clk_get(&pdev->dev, "bus_clk");
 	if (IS_ERR(mdp4_kms->axi_clk)) {
-		DRM_DEV_ERROR(dev->dev, "failed to get axi_clk\n");
-		ret = PTR_ERR(mdp4_kms->axi_clk);
+		ret = dev_err_probe(dev->dev, PTR_ERR(mdp4_kms->axi_clk),
+				    "failed to get axi_clk\n");
 		goto fail;
 	}
 
@@ -483,8 +483,9 @@ struct msm_kms *mdp4_kms_init(struct drm_device *dev)
 	if (mdp4_kms->rev >= 2) {
 		mdp4_kms->lut_clk = devm_clk_get(&pdev->dev, "lut_clk");
 		if (IS_ERR(mdp4_kms->lut_clk)) {
-			DRM_DEV_ERROR(dev->dev, "failed to get lut_clk\n");
-			ret = PTR_ERR(mdp4_kms->lut_clk);
+			ret = dev_err_probe(dev->dev,
+					    PTR_ERR(mdp4_kms->lut_clk),
+					    "failed to get lut_clk\n");
 			goto fail;
 		}
 		clk_set_rate(mdp4_kms->lut_clk, config->max_clk);

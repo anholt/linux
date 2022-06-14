@@ -328,10 +328,8 @@ int dsi_clk_init_v2(struct msm_dsi_host *msm_host)
 
 	if (IS_ERR(msm_host->src_clk)) {
 		ret = PTR_ERR(msm_host->src_clk);
-		pr_err("%s: can't find src clock. ret=%d\n",
-			__func__, ret);
 		msm_host->src_clk = NULL;
-		return ret;
+		return dev_err_probe(&pdev->dev, ret, "%s: can't find src clock\n", __func__);
 	}
 
 	msm_host->esc_clk_src = clk_get_parent(msm_host->esc_clk);

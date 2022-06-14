@@ -27,22 +27,16 @@ static int msm_hdmi_phy_resource_init(struct hdmi_phy *phy)
 		phy->regs[i].supply = cfg->reg_names[i];
 
 	ret = devm_regulator_bulk_get(dev, cfg->num_regs, phy->regs);
-	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev, "failed to get phy regulators: %d\n", ret);
-
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to get phy regulators\n");
 
 	for (i = 0; i < cfg->num_clks; i++) {
 		struct clk *clk;
 
 		clk = msm_clk_get(phy->pdev, cfg->clk_names[i]);
 		if (IS_ERR(clk)) {
-			ret = PTR_ERR(clk);
-			DRM_DEV_ERROR(dev, "failed to get phy clock: %s (%d)\n",
-				cfg->clk_names[i], ret);
-			return ret;
+			return dev_err_probe(dev, PTR_ERR(clk), "failed to get phy clock: %s\n",
+					     cfg->clk_names[i]);
 		}
 
 		phy->clks[i] = clk;
