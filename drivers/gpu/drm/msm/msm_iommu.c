@@ -218,6 +218,85 @@ static int msm_iommu_pagetable_map(struct msm_mmu *mmu, u64 iova,
 	return 0;
 }
 
+static int msm_iommu_pagetable_map2(struct msm_mmu *mmu, u64 iova,
+		struct sg_table *sgt, size_t src_offset, size_t len, int prot)
+{
+	struct msm_iommu_pagetable *pagetable = to_pagetable(mmu);
+	struct io_pgtable_ops *ops = pagetable->pgtbl_ops;
+	struct scatterlist *sg;
+	u64 addr = iova;
+	unsigned int i;
+
+	for_each_sgtable_sg(sgt, sg, i) {
+		size_t size = sg->length;
+		phys_addr_t phys = sg_phys(sg);
+
+		if (src_offset >= size) {
+			src_offset -= size;
+			continue;
+		}
+		phys += src_offset;
+		size -= src_offset;
+		src_offset = 0;
+
+		if (size > len)
+			size = len;
+
+		while (size) {
+			size_t pgsize, count, mapped = 0;
+			int ret;
+
+			pgsize = calc_pgsize(pagetable, addr, phys, size, &count);
+
+			ret = ops->map_pages(ops, addr, phys, pgsize, count,
+					     prot, GFP_KERNEL, &mapped);
+
+			/* map_pages could fail after mapping some of the pages,
+			 * so update the counters before error handling.
+			 */
+			phys += mapped;
+			addr += mapped;
+			size -= mapped;
+			len -= mapped;
+
+			if (ret) {
+				msm_iommu_pagetable_unmap(mmu, iova, addr - iova);
+				return -EINVAL;
+			}
+		}
+
+		if (len == 0)
+			break;
+	}
+
+	return 0;
+}
+
+int msm_iommu_pagetable_map_zero(struct msm_mmu *mmu, u64 iova, size_t size)
+{
+	struct msm_iommu_pagetable *pagetable = to_pagetable(mmu);
+	struct io_pgtable_ops *ops = pagetable->pgtbl_ops;
+	u64 addr = iova;
+	phys_addr_t phys = 0;
+	int prot = IOMMU_READ | IOMMU_WRITE; // | IOMMU_NOEXEC | get_llcc_flags(pt->mmu);
+
+	while (size) {
+		size_t mapped = 0;
+		int ret;
+
+		ret = ops->map_pages(ops, addr, phys, 4096, 1, prot, GFP_KERNEL, &mapped);
+		addr += mapped;
+		size -= mapped;
+
+		if (ret) {
+			msm_iommu_pagetable_unmap(mmu, iova, addr - iova);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 static void msm_iommu_pagetable_destroy(struct msm_mmu *mmu)
 {
 	struct msm_iommu_pagetable *pagetable = to_pagetable(mmu);
@@ -796,4 +875,181 @@ struct msm_mmu *msm_iommu_gpu_new(struct device *dev, struct msm_gpu *gpu, unsig
 		adreno_smmu->set_stall(adreno_smmu->cookie, true);
 
 	return mmu;
+}
+
+#include "msm_gem.h"
+
+struct msm_gem_vbo_entry {
+	struct list_head node;
+	struct drm_gem_object *obj;
+	u64 offset;
+	u64 length;
+};
+
+struct msm_gem_vbo {
+	struct list_head entries;
+	struct drm_mm_node mm_node;
+	struct drm_gpuvm *vm;
+	struct drm_gem_object base;
+	u32 flags;
+};
+#define to_msm_vbo(x) container_of(x, struct msm_gem_vbo, base)
+
+static void msm_gem_free_vbo(struct drm_gem_object *obj)
+{
+	struct msm_gem_vbo *vbo = to_msm_vbo(obj);
+	struct msm_gem_vbo_entry *entry, *tmp;
+	struct msm_gem_vm *vm = to_msm_vm(vbo->vm);
+	struct drm_exec exec;
+
+	msm_iommu_pagetable_unmap(vm->mmu, vbo->mm_node.start, vbo->mm_node.size);
+
+	list_for_each_entry_safe(entry, tmp, &vbo->entries, node) {
+		drm_gem_object_put(entry->obj);
+		kfree(entry);
+	}
+
+	drm_exec_init(&exec, 0, 0);
+	drm_exec_until_all_locked (&exec) {
+		struct drm_gpuvm_bo *vm_bo;
+		drm_gem_for_each_gpuvm_bo (vm_bo, obj) {
+			drm_exec_lock_obj(&exec,
+						drm_gpuvm_resv_obj(vm_bo->vm));
+			drm_exec_retry_on_contention(&exec);
+		}
+	}
+	drm_mm_remove_node(&vbo->mm_node);
+	drm_exec_fini(&exec);     /* drop locks */
+
+	// TODO remove onj from vm?
+	//msm_gem_address_space_put(vbo->aspace);
+	drm_gem_object_release(obj);
+	kfree(vbo);
+}
+
+static const struct drm_gem_object_funcs msm_gem_vbo_funcs = {
+	.free = msm_gem_free_vbo,
+};
+
+struct drm_gem_object *msm_gem_vbo_new(struct drm_device *dev, u64 size, u32 flags,
+		struct drm_gpuvm *_vm)
+{
+	struct msm_gem_vbo *vbo;
+	struct msm_gem_vm *vm = to_msm_vm(_vm);
+	struct drm_exec exec;
+	int ret;
+
+	vbo = kzalloc(sizeof(*vbo), GFP_KERNEL);
+	if (!vbo)
+		return ERR_PTR(-ENOMEM);
+
+	INIT_LIST_HEAD(&vbo->entries);
+	vbo->vm = _vm;
+	vbo->flags = flags;
+	vbo->base.funcs = &msm_gem_vbo_funcs;
+	drm_gem_private_object_init(dev, &vbo->base, size);
+
+	msm_gem_lock_vm_and_obj(&exec, &vbo->base, &vm->base);
+	ret = drm_mm_insert_node_in_range(&vm->mm, &vbo->mm_node,
+					  size, 1ull << ((flags >> 20) & 0x3f), 0,
+					  0, U64_MAX, 0);
+	drm_exec_fini(&exec);     /* drop locks */
+
+	if (ret) {
+		kfree(vbo);
+		return ERR_PTR(ret);
+	}
+
+	//printk("vbo addr: %llx size %llx\n", vbo->mm_node.start, vbo->mm_node.size);
+	// don't ignore MSM_VBO_NO_MAP_ZERO ?
+
+	// TODO add obj to the vm?
+	//kref_get(&aspace->kref);
+
+	ret = msm_iommu_pagetable_map_zero(vm->mmu, vbo->mm_node.start, size);
+	WARN_ON(ret);
+
+	return &vbo->base;
+}
+
+int msm_gem_is_vbo(struct drm_gem_object *obj)
+{
+	return obj->funcs == &msm_gem_vbo_funcs;
+}
+
+int msm_gem_vbo_get_iova(struct drm_gem_object *obj,
+		struct drm_gpuvm *vm, uint64_t *iova)
+{
+	struct msm_gem_vbo *vbo = to_msm_vbo(obj);
+	if (vm != vbo->vm)
+		return -EINVAL;
+	*iova = vbo->mm_node.start;
+	return 0;
+}
+
+void msm_gem_vbo_bind(struct drm_gem_object *_vbo, struct drm_gem_object *obj,
+		u64 src_offset, u64 dst_offset, u64 length)
+{
+	struct msm_gem_vbo *vbo = to_msm_vbo(_vbo);
+	struct msm_gem_vm *vm = to_msm_vm(vbo->vm);
+	struct msm_gem_object *msm_obj = to_msm_bo(obj);
+	struct msm_gem_vbo_entry *entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	int prot = IOMMU_READ;
+	int ret;
+
+	//printk("msm_gem_vbo_bind: %lld %lld %lld\n", src_offset, dst_offset, length);
+
+	if (!(vbo->flags & MSM_BO_GPU_READONLY))
+		prot |= IOMMU_WRITE;
+
+	// kgsl doesn't allow coherent for vbos?
+	//if (vbo->flags & MSM_BO_CACHED_COHERENT)
+	//	prot |= IOMMU_CACHE;
+
+	// TODO: make sure there is no overlap with other entries?
+
+	msm_gem_lock(obj);
+	msm_gem_pin_pages_locked(obj);
+	msm_gem_unlock(obj);
+
+	// TODO: switch atomically (instead of unmapping first)
+	msm_iommu_pagetable_unmap(vm->mmu, vbo->mm_node.start + dst_offset, length);
+	ret = msm_iommu_pagetable_map2(vm->mmu, vbo->mm_node.start + dst_offset,
+			msm_obj->sgt, src_offset, length, prot);
+	if (ret) {
+		WARN_ON(1);
+		kfree(entry);
+		return;
+	}
+
+	entry->obj = obj;
+	entry->offset = dst_offset;
+	entry->length = length;
+	list_add_tail(&entry->node, &vbo->entries);
+
+	drm_gem_object_get(obj);
+}
+
+void msm_gem_vbo_unbind(struct drm_gem_object *_vbo, struct drm_gem_object *obj, u64 offset, u64 length)
+{
+	struct msm_gem_vbo *vbo = to_msm_vbo(_vbo);
+	struct msm_gem_vm *vm = to_msm_vm(vbo->vm);
+	struct msm_gem_vbo_entry *entry, *tmp;
+
+	//printk("msm_gem_vbo_unbind: %lld %lld\n", offset, length);
+
+	list_for_each_entry_safe(entry, tmp, &vbo->entries, node) {
+		if (obj && obj != entry->obj)
+			continue;
+		/* skip if range doesn't overlap */
+		if (!(entry->offset < (offset + length) && offset < (entry->offset + entry->length)))
+			continue;
+
+		// TODO: switch atomically (instead of unmapping first)
+		msm_iommu_pagetable_unmap(vm->mmu, vbo->mm_node.start + entry->offset, entry->length);
+		msm_iommu_pagetable_map_zero(vm->mmu, vbo->mm_node.start + entry->offset, entry->length);
+
+		drm_gem_object_put(entry->obj);
+		list_del(&entry->node);
+	}
 }

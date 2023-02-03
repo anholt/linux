@@ -1229,6 +1229,8 @@ err_drm_gem_object_put:
 }
 EXPORT_SYMBOL(drm_gem_mmap_obj);
 
+int kgsl_mmap(struct drm_file *priv, struct drm_device *dev, struct vm_area_struct *vma);
+
 /*
  * Look up a GEM object in offset space based on the exact start address. The
  * caller must be granted access to the object. Returns a GEM object on success
@@ -1341,8 +1343,13 @@ EXPORT_SYMBOL_GPL(drm_gem_get_unmapped_area);
  */
 int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 {
+	struct drm_file *priv = filp->private_data;
+	struct drm_device *dev = priv->minor->dev;
 	struct drm_gem_object *obj;
 	int ret;
+
+	if (vma->vm_pgoff < DRM_FILE_PAGE_OFFSET_START)
+		return kgsl_mmap(priv, dev, vma);
 
 	obj = drm_gem_object_lookup_at_offset(filp, vma->vm_pgoff,
 					      vma_pages(vma));

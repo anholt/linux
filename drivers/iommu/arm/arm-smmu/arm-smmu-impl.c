@@ -135,6 +135,11 @@ int arm_mmu500_reset(struct arm_smmu_device *smmu)
 	for (int i = 0; i < smmu->num_context_banks; ++i) {
 		reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
 		reg &= ~ARM_MMU500_ACTLR_CPRE;
+
+		// set PRR_EN bit (only exists on gpu smmu)
+		// note: PRR_CFG ADDR defaults to 0
+		reg |= BIT(5);
+
 		arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_ACTLR, reg);
 		reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
 		if (reg & ARM_MMU500_ACTLR_CPRE)

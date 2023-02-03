@@ -73,6 +73,12 @@ void msm_submitqueue_destroy(struct kref *kref)
 {
 	struct msm_gpu_submitqueue *queue = container_of(kref,
 		struct msm_gpu_submitqueue, ref);
+	struct kgsl_fence *fence, *tmp;
+
+	list_for_each_entry_safe(fence, tmp, &queue->fences, node) {
+		dma_fence_signal(&fence->base);
+		dma_fence_put(&fence->base);
+	}
 
 	idr_destroy(&queue->fence_idr);
 
@@ -81,13 +87,38 @@ void msm_submitqueue_destroy(struct kref *kref)
 
 	msm_context_put(queue->ctx);
 
+	spin_lock(&queue->gpu->id_lock);
+	queue->gpu->id_map[queue->id >> 6] &= ~(1ull << (~queue->id&63));
+	spin_unlock(&queue->gpu->id_lock);
+
 	kfree(queue);
+}
+
+void msm_submitqueue_retire_timestamp(struct msm_gpu_submitqueue *queue, u32 timestamp)
+{
+	struct kgsl_fence *fence, *tmp;
+	unsigned long flags;
+
+	spin_lock_irqsave(&queue->fence_lock, flags);
+	list_for_each_entry_safe(fence, tmp, &queue->fences, node) {
+		if (timestamp < fence->timestamp)
+			continue;
+		dma_fence_signal(&fence->base);
+		dma_fence_put(&fence->base);
+		list_del(&fence->node);
+	}
+	WARN_ON(timestamp < queue->timestamp_retired);
+	queue->timestamp_retired = timestamp;
+	spin_unlock_irqrestore(&queue->fence_lock, flags);
+
+	wmb(); /* make sure timestamp_retired write goes through */
+	wake_up_interruptible(&queue->waitqueue);
 }
 
 struct msm_gpu_submitqueue *msm_submitqueue_get(struct msm_context *ctx,
 		u32 id)
 {
-	struct msm_gpu_submitqueue *entry;
+	struct msm_gpu_submitqueue *entry = NULL;
 
 	if (!ctx)
 		return NULL;
@@ -100,6 +131,7 @@ struct msm_gpu_submitqueue *msm_submitqueue_get(struct msm_context *ctx,
 			read_unlock(&ctx->queuelock);
 
 			return entry;
+
 		}
 	}
 
@@ -168,13 +200,18 @@ get_sched_entity(struct msm_context *ctx, struct msm_ringbuffer *ring,
 	return ctx->entities[idx];
 }
 
+void a7xx_reset_memstore(struct msm_gpu *gpu, uint32_t ctx_id);
+
 int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 		u32 prio, u32 flags, u32 *id)
 {
 	struct msm_drm_private *priv = drm->dev_private;
+	struct msm_gpu *gpu = priv->gpu;
 	struct msm_gpu_submitqueue *queue;
 	enum drm_sched_priority sched_prio;
-	unsigned ring_nr;
+	extern int enable_preemption;
+	bool preemption_supported;
+	unsigned ring_nr, i;
 	int ret;
 
 	if (!ctx)
@@ -239,16 +276,47 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 	write_lock(&ctx->queuelock);
 
 	queue->ctx = msm_context_get(ctx);
-	queue->id = ctx->queueid++;
+	//queue->id = ctx->queueid++;
 
-	if (id)
-		*id = queue->id;
+	//if (id)
+	//	*id = queue->id;
 
 	idr_init(&queue->fence_idr);
 	spin_lock_init(&queue->idr_lock);
 	mutex_init(&queue->lock);
 
 	list_add_tail(&queue->node, &ctx->submitqueues);
+
+	queue->timestamp = 0;
+	queue->timestamp_retired = 0;
+	spin_lock_init(&queue->fence_lock);
+	INIT_LIST_HEAD(&queue->fences);
+	init_waitqueue_head(&queue->waitqueue);
+
+	queue->id = -1;
+	queue->gpu = gpu;
+	spin_lock(&gpu->id_lock);
+	for (i = 0; i < ARRAY_SIZE(gpu->id_map); i++) {
+		if (gpu->id_map[i] == ~0ull)
+			continue;
+
+		queue->id = __builtin_clzll(~gpu->id_map[i]);
+		gpu->id_map[i] |= 1ull << (~queue->id & 63);
+		queue->id += i*64;
+		break;
+	}
+
+	spin_unlock(&gpu->id_lock);
+
+	if (queue->id == -1) {
+		kfree(queue);
+		return -ENOMEM;
+	}
+
+	a7xx_reset_memstore(gpu, queue->id);
+
+	if (id)
+		*id = queue->id;
 
 	write_unlock(&ctx->queuelock);
 
@@ -322,17 +390,10 @@ int msm_submitqueue_query(struct drm_device *drm, struct msm_context *ctx,
 
 int msm_submitqueue_remove(struct msm_context *ctx, u32 id)
 {
-	struct msm_gpu_submitqueue *entry;
+	struct msm_gpu_submitqueue *entry = NULL;
 
 	if (!ctx)
 		return 0;
-
-	/*
-	 * id 0 is the "default" queue and can't be destroyed
-	 * by the user
-	 */
-	if (!id)
-		return -ENOENT;
 
 	write_lock(&ctx->queuelock);
 

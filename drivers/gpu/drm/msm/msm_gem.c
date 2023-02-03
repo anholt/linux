@@ -437,6 +437,7 @@ static struct drm_gpuva *get_vma_locked(struct drm_gem_object *obj,
 					struct drm_gpuvm *vm, u64 range_start,
 					u64 range_end)
 {
+	struct msm_gem_object *msm_obj = to_msm_bo(obj);
 	struct drm_gpuva *vma;
 
 	msm_gem_assert_locked(obj);
@@ -444,7 +445,7 @@ static struct drm_gpuva *get_vma_locked(struct drm_gem_object *obj,
 	vma = lookup_vma(obj, vm);
 
 	if (!vma) {
-		vma = msm_gem_vma_new(vm, obj, 0, range_start, range_end);
+		vma = msm_gem_vma_new(vm, obj, (msm_obj->flags >> 20) & 0x3f, 0, range_start, range_end);
 	} else {
 		GEM_WARN_ON(vma->va.addr < range_start);
 		GEM_WARN_ON((vma->va.addr + obj->size) > range_end);
@@ -571,6 +572,9 @@ int msm_gem_get_and_pin_iova_range(struct drm_gem_object *obj,
 int msm_gem_get_and_pin_iova(struct drm_gem_object *obj, struct drm_gpuvm *vm,
 			     uint64_t *iova)
 {
+	if (msm_gem_is_vbo(obj))
+		return msm_gem_vbo_get_iova(obj, vm, iova);
+
 	return msm_gem_get_and_pin_iova_range(obj, vm, iova, 0, U64_MAX);
 }
 
@@ -584,6 +588,9 @@ int msm_gem_get_iova(struct drm_gem_object *obj, struct drm_gpuvm *vm,
 	struct drm_gpuva *vma;
 	struct drm_exec exec;
 	int ret = 0;
+
+	if (msm_gem_is_vbo(obj))
+		return msm_gem_vbo_get_iova(obj, vm, iova);
 
 	msm_gem_lock_vm_and_obj(&exec, obj, vm);
 	vma = get_vma_locked(obj, vm, 0, U64_MAX);

@@ -1030,7 +1030,7 @@ static void syncobj_wait_syncobj_func(struct drm_syncobj *syncobj,
 	list_del_init(&wait->node);
 }
 
-static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
+signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 						  void __user *user_points,
 						  uint32_t count,
 						  uint32_t flags,

@@ -29,7 +29,7 @@
  * Cmdstream submission:
  */
 
-static struct msm_gem_submit *submit_create(struct drm_device *dev,
+struct msm_gem_submit *submit_create(struct drm_device *dev,
 		struct msm_gpu *gpu,
 		struct msm_gpu_submitqueue *queue, uint32_t nr_bos,
 		uint32_t nr_cmds, u64 drm_client_id)

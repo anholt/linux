@@ -818,6 +818,10 @@ EXPORT_SYMBOL(drm_ioctl_kernel);
  * Returns:
  * Zero on success, negative error code on failure.
  */
+
+#define KGSL_IOC_TYPE 0x09
+long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+
 long drm_ioctl(struct file *filp,
 	      unsigned int cmd, unsigned long arg)
 {
@@ -837,8 +841,11 @@ long drm_ioctl(struct file *filp,
 	if (drm_dev_is_unplugged(dev))
 		return -ENODEV;
 
-	if (DRM_IOCTL_TYPE(cmd) != DRM_IOCTL_BASE)
+	if (DRM_IOCTL_TYPE(cmd) != DRM_IOCTL_BASE) {
+		if (DRM_IOCTL_TYPE(cmd) == KGSL_IOC_TYPE)
+			return kgsl_ioctl(filp, cmd, arg);
 		return -ENOTTY;
+	}
 
 	is_driver_ioctl = nr >= DRM_COMMAND_BASE && nr < DRM_COMMAND_END;
 

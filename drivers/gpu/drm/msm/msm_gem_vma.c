@@ -366,7 +366,7 @@ void msm_gem_vma_close(struct drm_gpuva *vma)
 /* Create a new vma and allocate an iova for it */
 struct drm_gpuva *
 msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
-		u64 offset, u64 range_start, u64 range_end)
+		u32 align, u64 offset, u64 range_start, u64 range_end)
 {
 	struct msm_gem_vm *vm = to_msm_vm(gpuvm);
 	struct drm_gpuvm_bo *vm_bo;
@@ -383,7 +383,7 @@ msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
 		BUG_ON(offset != 0);
 		BUG_ON(!obj);  /* NULL mappings not valid for kernel managed VM */
 		ret = drm_mm_insert_node_in_range(&vm->mm, &vma->node,
-						obj->size, PAGE_SIZE, 0,
+						obj->size, align, 0,
 						range_start, range_end, 0);
 
 		if (ret)
@@ -481,7 +481,7 @@ vm_op_enqueue(struct op_arg *arg, struct msm_vm_op _op)
 static struct drm_gpuva *
 vma_from_op(struct op_arg *arg, struct drm_gpuva_op_map *op)
 {
-	return msm_gem_vma_new(arg->job->vm, op->gem.obj, op->gem.offset,
+	return msm_gem_vma_new(arg->job->vm, op->gem.obj, PAGE_SIZE, op->gem.offset,
 			       op->va.addr, op->va.addr + op->va.range);
 }
 
