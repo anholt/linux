@@ -177,8 +177,7 @@ int adreno_zap_shader_load(struct msm_gpu *gpu, u32 pasid)
 
 	/* We need SCM to be able to load the firmware */
 	if (!qcom_scm_is_available()) {
-		DRM_DEV_ERROR(&pdev->dev, "SCM is not available\n");
-		return -EPROBE_DEFER;
+		return -ENODEV;
 	}
 
 	return zap_shader_load_mdt(gpu, adreno_gpu->info->zapfw, pasid);
@@ -651,6 +650,7 @@ int adreno_hw_init(struct msm_gpu *gpu)
 	VERB("%s", gpu->name);
 
 	if (adreno_gpu->info->family >= ADRENO_6XX_GEN1 &&
+	    qcom_scm_is_available() &&
 	    qcom_scm_set_gpu_smmu_aperture_is_available()) {
 		/* We currently always use context bank 0, so hard code this */
 		ret = qcom_scm_set_gpu_smmu_aperture(0);

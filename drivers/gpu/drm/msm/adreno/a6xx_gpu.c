@@ -1581,6 +1581,12 @@ static int hw_init(struct msm_gpu *gpu)
 			"Zap shader not enabled - using SECVID_TRUST_CNTL instead\n");
 		gpu_write(gpu, REG_A6XX_RBBM_SECVID_TRUST_CNTL, 0x0);
 		ret = 0;
+
+		/* SMMU aperture - for CP to be able to touch SMMU (for per process page tables) */
+		gpu_write(gpu, 0x60000 >> 2, 0xc0000);
+		gpu_write(gpu, 0x60004 >> 2, 0xc1000);
+		gpu_write(gpu, 0x60008 >> 2, 2);
+		gpu_write(gpu, 0x6000c >> 2, 0xc2000);
 	} else {
 		return ret;
 	}
