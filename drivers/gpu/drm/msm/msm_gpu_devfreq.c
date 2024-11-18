@@ -109,6 +109,8 @@ static int msm_devfreq_get_dev_status(struct device *dev,
 
 	status->busy_time = busy_time;
 
+	trace_msm_gpu_devfreq_status(div64_ul(busy_time * 100, status->total_time));
+
 	return 0;
 }
 
