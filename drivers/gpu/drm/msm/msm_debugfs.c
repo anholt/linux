@@ -307,6 +307,24 @@ static int msm_gem_show(struct seq_file *m, void *arg)
 	return 0;
 }
 
+static int msm_gemstat_show(struct seq_file *m, void *arg)
+{
+	struct drm_info_node *node = m->private;
+	struct drm_device *dev = node->minor->dev;
+	struct msm_drm_private *priv = dev->dev_private;
+	int ret;
+
+	ret = mutex_lock_interruptible(&priv->obj_lock);
+	if (ret)
+		return ret;
+
+	msm_gem_objects_total(&priv->objects, m);
+
+	mutex_unlock(&priv->obj_lock);
+
+	return 0;
+}
+
 static int msm_mm_show(struct seq_file *m, void *arg)
 {
 	struct drm_info_node *node = m->private;
@@ -320,6 +338,7 @@ static int msm_mm_show(struct seq_file *m, void *arg)
 
 static struct drm_info_list msm_debugfs_list[] = {
 		{"gem", msm_gem_show},
+		{"gemstat", msm_gemstat_show},
 		{ "mm", msm_mm_show },
 };
 

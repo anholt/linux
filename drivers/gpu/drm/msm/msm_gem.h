@@ -317,6 +317,8 @@ struct msm_gem_stats {
 void msm_gem_describe(struct drm_gem_object *obj, struct seq_file *m,
 		struct msm_gem_stats *stats);
 void msm_gem_describe_objects(struct list_head *list, struct seq_file *m);
+
+void msm_gem_objects_total(struct list_head *list, struct seq_file *m);
 #endif
 
 static inline void
