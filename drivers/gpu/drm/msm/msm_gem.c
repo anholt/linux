@@ -464,8 +464,12 @@ int msm_gem_prot(struct drm_gem_object *obj)
 	if (msm_obj->flags & MSM_BO_MAP_PRIV)
 		prot |= IOMMU_PRIV;
 
-	if (msm_obj->flags & MSM_BO_CACHED_COHERENT)
-		prot |= IOMMU_CACHE;
+ 	if (msm_obj->flags & MSM_BO_CACHED_COHERENT)
+ 		prot |= IOMMU_CACHE;
+	else if (prot == 1)
+		prot |= IOMMU_QCOM_SYS_CACHE;
+	else if (prot == 2)
+		prot |= IOMMU_USE_LLC_NWA;
 
 	return prot;
 }
