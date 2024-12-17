@@ -240,7 +240,7 @@ TRACE_EVENT(msm_gpu_devfreq_status,
 		TP_fast_assign(
 			__entry->busy_time = busy_time;
 			),
-		TP_printk("preempted to %u", __entry->busy_time)
+		TP_printk("preempted to %llu", __entry->busy_time)
 );
 
 #endif
