@@ -325,6 +325,34 @@ static int msm_gemstat_show(struct seq_file *m, void *arg)
 	return 0;
 }
 
+static int msm_load_show(struct seq_file *m, void *arg)
+{
+	struct drm_info_node *node = m->private;
+	struct drm_device *dev = node->minor->dev;
+	struct msm_drm_private *priv = dev->dev_private;
+	struct msm_gpu *gpu = priv->gpu;
+	uint64_t elapsed_gpu = gpu->elapsed_ns;
+	uint64_t elapsed_cpu = ktime_get_ns();
+	int load;
+	int ret;
+
+	ret = mutex_lock_interruptible(&priv->obj_lock);
+	if (ret)
+		return ret;
+
+	load = 100 * (elapsed_gpu - priv->load_state.last_gpu) /
+		(elapsed_cpu - priv->load_state.last_cpu);
+
+	seq_printf(m, "%d\n", load);
+
+	priv->load_state.last_gpu = elapsed_gpu;
+	priv->load_state.last_cpu = elapsed_cpu;
+
+	mutex_unlock(&priv->obj_lock);
+
+	return 0;
+}
+
 static int msm_mm_show(struct seq_file *m, void *arg)
 {
 	struct drm_info_node *node = m->private;
@@ -339,6 +367,7 @@ static int msm_mm_show(struct seq_file *m, void *arg)
 static struct drm_info_list msm_debugfs_list[] = {
 		{"gem", msm_gem_show},
 		{"gemstat", msm_gemstat_show},
+		{"load", msm_load_show},
 		{ "mm", msm_mm_show },
 };
 

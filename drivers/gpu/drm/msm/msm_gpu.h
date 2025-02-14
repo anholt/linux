@@ -166,6 +166,9 @@ struct msm_gpu {
 	struct platform_device *pdev;
 	const struct msm_gpu_funcs *funcs;
 
+	/* total gpu busy time */
+	uint64_t elapsed_ns;
+
 	struct adreno_smmu_priv adreno_smmu;
 
 	/* performance counters (hw & sw): */

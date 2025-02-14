@@ -798,6 +798,8 @@ static void retire_submit(struct msm_gpu *gpu, struct msm_ringbuffer *ring,
 	submit->queue->ctx->elapsed_ns += elapsed;
 	submit->queue->ctx->cycles     += cycles;
 
+	gpu->elapsed_ns += elapsed;
+
 	trace_msm_gpu_submit_retired(submit, elapsed, clock,
 		stats->alwayson_start, stats->alwayson_end);
 
