@@ -1740,6 +1740,9 @@ static void a6xx_recover(struct msm_gpu *gpu)
 	if (gpu->perfcntr_active)
 		pm_runtime_put(&gpu->pdev->dev);
 
+	if (gpu->perfcntr_active)
+		pm_runtime_put(&gpu->pdev->dev);
+
 	/* And the final one from recover worker */
 	pm_runtime_put_sync(&gpu->pdev->dev);
 
