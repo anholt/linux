@@ -259,6 +259,84 @@ int kgsl_mmap(struct drm_file *file_priv, struct drm_device *dev, struct vm_area
 	return ret;
 }
 
+static int kgsl_alloc(struct drm_file *file_priv, struct kgsl_gpuobj_alloc *alloc) {
+	struct drm_device *dev = file_priv->minor->dev;
+	struct msm_context *ctx = file_priv->driver_priv;
+	struct drm_gpuvm *vm = msm_context_vm(dev, ctx);
+	struct drm_gem_object *obj;
+	u32 msm_flags = MSM_BO_WC;
+	unsigned size;
+
+	union {
+		struct {
+			u64 bits_0_2 : 3;
+			u64 secure : 1;
+			u64 bits_4_7 : 4;
+			u64 mem_type : 8;
+			u64 mem_align : 8;
+			u64 gpu_read_only : 1;
+			u64 gpu_write_only : 1;
+			u64 cache_mode : 2;
+			u64 use_cpu_map : 1;
+			u64 sparse_phys : 1;
+			u64 sparse_virt : 1;
+			u64 iocoherent : 1;
+			u64 force_32bit : 1;
+			u64 guard_page : 1;
+			u64 vbo : 1;
+			u64 vbo_no_map_zero : 1;
+		};
+		u64 bits;
+	} flags;
+
+	flags.bits = alloc->flags;
+
+	// support only mem_type, mem_align, readonly, cache_mode, iocoherent, vbo
+	if (flags.bits & ~0xc8dffff00ull) {
+		DRM_DEV_ERROR(dev->dev, "unexpected alloc flags: %llx\n", alloc->flags);
+		return -EINVAL;
+	}
+
+	if (flags.mem_align < 12 || flags.mem_align > 20) {
+		dev_warn(dev->dev, "unexpected mem_align: %d\n", flags.mem_align);
+		return -EINVAL;
+	}
+
+	//if (flags.cache_mode == KGSL_CACHEMODE_WRITETHROUGH || flags.cache_mode == KGSL_CACHEMODE_WRITEBACK)
+	//	msm_flags = flags.iocoherent ? MSM_BO_CACHED_COHERENT : MSM_BO_CACHED;
+	msm_flags |= flags.mem_align << 20;
+
+	if (msm_flags == MSM_BO_CACHED && 0) {
+		dev_warn(dev->dev, "forced iocoherent because cache sync isn't implemented\n");
+		msm_flags = MSM_BO_CACHED_COHERENT;
+	}
+
+	if (flags.gpu_read_only)
+		msm_flags |= MSM_BO_GPU_READONLY;
+	if (flags.vbo_no_map_zero)
+		msm_flags |= MSM_VBO_NO_MAP_ZERO;
+
+	// XXX overflow
+	size = (alloc->size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1); /* 4k aligned size */
+
+	if (flags.vbo)
+		obj = msm_gem_vbo_new(dev, size, msm_flags, vm);
+	else
+		obj = msm_gem_new(dev, size, msm_flags);
+	if (IS_ERR(obj))
+		return PTR_ERR(obj);
+
+	int ret = drm_gem_handle_create(file_priv, obj, &alloc->id);
+	drm_gem_object_put(obj);
+	if (ret)
+		return ret;
+
+	alloc->va_len = size;
+	alloc->mmapsize = size;
+
+	return 0;
+}
+
 long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = file->private_data;
@@ -444,29 +522,6 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 case IOCTL_KGSL_GPUOBJ_ALLOC: {
 	struct kgsl_gpuobj_alloc alloc;
-	unsigned size;
-	union {
-		struct {
-			u64 bits_0_2 : 3;
-			u64 secure : 1;
-			u64 bits_4_7 : 4;
-			u64 mem_type : 8;
-			u64 mem_align : 8;
-			u64 gpu_read_only : 1;
-			u64 gpu_write_only : 1;
-			u64 cache_mode : 2;
-			u64 use_cpu_map : 1;
-			u64 sparse_phys : 1;
-			u64 sparse_virt : 1;
-			u64 iocoherent : 1;
-			u64 force_32bit : 1;
-			u64 guard_page : 1;
-			u64 vbo : 1;
-			u64 vbo_no_map_zero : 1;
-		};
-		u64 bits;
-	} flags;
-	u32 msm_flags = MSM_BO_WC;
 
 	if (copy_from_user(&alloc, argp, sizeof(alloc)))
 		return -EFAULT;
@@ -474,49 +529,7 @@ case IOCTL_KGSL_GPUOBJ_ALLOC: {
 	if (alloc.size >> 32)
 		return -EINVAL;
 
-	flags.bits = alloc.flags;
-	// support only mem_type, mem_align, readonly, cache_mode, iocoherent, vbo
-	if (flags.bits & ~0xc8dffff00ull) {
-		DRM_DEV_ERROR(dev->dev, "unexpected alloc flags: %llx\n", alloc.flags);
-		return -EINVAL;
-	}
-
-	if (flags.mem_align < 12 || flags.mem_align > 20) {
-		dev_warn(dev->dev, "unexpected mem_align: %d\n", flags.mem_align);
-		return -EINVAL;
-	}
-
-	//if (flags.cache_mode == KGSL_CACHEMODE_WRITETHROUGH || flags.cache_mode == KGSL_CACHEMODE_WRITEBACK)
-	//	msm_flags = flags.iocoherent ? MSM_BO_CACHED_COHERENT : MSM_BO_CACHED;
-	msm_flags |= flags.mem_align << 20;
-
-	if (msm_flags == MSM_BO_CACHED && 0) {
-		dev_warn(dev->dev, "forced iocoherent because cache sync isn't implemented\n");
-		msm_flags = MSM_BO_CACHED_COHERENT;
-	}
-
-	if (flags.gpu_read_only)
-		msm_flags |= MSM_BO_GPU_READONLY;
-	if (flags.vbo_no_map_zero)
-		msm_flags |= MSM_VBO_NO_MAP_ZERO;
-
-	// XXX overflow
-	size = (alloc.size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1); /* 4k aligned size */
-
-	if (flags.vbo)
-		obj = msm_gem_vbo_new(dev, size, msm_flags, vm);
-	else
-		obj = msm_gem_new(dev, size, msm_flags);
-	if (IS_ERR(obj))
-		return PTR_ERR(obj);
-
-	ret = drm_gem_handle_create(file_priv, obj, &alloc.id);
-	drm_gem_object_put(obj);
-	if (ret)
-		return ret;
-
-	alloc.va_len = size;
-	alloc.mmapsize = size;
+	kgsl_alloc(file_priv, &alloc);
 
 	if (copy_to_user(argp, &alloc, sizeof(alloc)))
 		WARN_ON(1);
@@ -577,6 +590,47 @@ case IOCTL_KGSL_GPUOBJ_INFO: {
 	return 0;
 }
 
+case IOCTL_KGSL_GPUMEM_ALLOC_ID: {
+	struct kgsl_gpumem_alloc_id alloc;
+	struct kgsl_gpuobj_alloc c_alloc;
+
+	if (copy_from_user(&alloc, argp, sizeof(alloc)))
+		return -EFAULT;
+
+	if (alloc.size >> 32)
+		return -EINVAL;
+
+	c_alloc.id = alloc.id;
+	c_alloc.flags = alloc.flags;
+	c_alloc.size = alloc.size;
+	c_alloc.metadata_len = 0;
+	c_alloc.metadata = 0;
+
+	kgsl_alloc(file_priv, &c_alloc);
+
+	alloc.mmapsize = c_alloc.mmapsize;
+	alloc.id = c_alloc.id;
+
+	obj = drm_gem_object_lookup(file_priv, alloc.id);
+	if (!obj) {
+		//XXX: we are not deallocating in case of failure
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	msm_gem_get_and_pin_iova(obj, ctx->vm, (uint64_t *)&alloc.gpuaddr);
+
+	drm_gem_object_put(obj);
+
+	if (copy_to_user(argp, &alloc, sizeof(alloc))) {
+		//XXX: we are not deallocating in case of failure
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 case IOCTL_KGSL_GPUOBJ_FREE: {
 	struct kgsl_gpuobj_free free;
 
@@ -587,6 +641,24 @@ case IOCTL_KGSL_GPUOBJ_FREE: {
 		DRM_DEV_ERROR(dev->dev, "unexpected free flags: %llx\n", free.flags);
 		return -EINVAL;
 	}
+
+	return drm_gem_handle_delete(file_priv, free.id);
+}
+
+case IOCTL_KGSL_GPUMEM_FREE_ID: {
+	struct kgsl_gpumem_free_id free;
+
+	if (copy_from_user(&free, argp, sizeof(free)))
+		return -EFAULT;
+
+	obj = drm_gem_object_lookup(file_priv, free.id);
+	if (!obj)
+		return -EINVAL;
+
+	if (!msm_gem_is_vbo(obj))
+		msm_gem_unpin_iova(obj, ctx->vm);
+
+	drm_gem_object_put(obj);
 
 	return drm_gem_handle_delete(file_priv, free.id);
 }
