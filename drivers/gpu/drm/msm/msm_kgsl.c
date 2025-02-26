@@ -441,6 +441,11 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		case KGSL_PROP_IS_LPAC_ENABLED: { prop.val = 0; } break;
 		case KGSL_PROP_IS_RAYTRACING_ENABLED: { prop.val = 1; } break;
 		case KGSL_PROP_IS_FASTBLEND_ENABLED: { prop.val = 1; } break;
+		case KGSL_PROP_GPU_RESET_STAT: {
+			prop.val = to_msm_vm(ctx->vm)->faults < to_msm_vm(ctx->vm)->kgsl_last_queried_faults ?
+				KGSL_CTX_STAT_NO_ERROR : KGSL_CTX_STAT_INNOCENT_CONTEXT_RESET_EXT;
+			to_msm_vm(ctx->vm)->kgsl_last_queried_faults = to_msm_vm(ctx->vm)->faults;
+		} break;
 		default:
 			DRM_DEV_ERROR(dev->dev, "TODO: get prop %d\n", get_prop.type);
 			return -ENODEV;

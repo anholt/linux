@@ -130,7 +130,7 @@ struct msm_gem_vm {
 	uint32_t log_idx;
 
 	/** @faults: the number of GPU hangs associated with this address space */
-	int faults;
+	int faults, kgsl_last_queried_faults;
 
 	/** @managed: is this a kernel managed VM? */
 	bool managed;
