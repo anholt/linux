@@ -359,12 +359,11 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&create, argp, sizeof(create)))
 			return -EFAULT;
 
-		/* only user timestamps are supported */
-		if (!(create.flags & KGSL_CONTEXT_USER_GENERATED_TS))
-			return -EINVAL;
-
 		// XXX: look at create.flags
 		ret = msm_submitqueue_create(dev, ctx, 0, 0, &create.drawctxt_id);
+
+		queue = msm_submitqueue_get(ctx, create.drawctxt_id);
+		queue->kgsl_flags = create.flags;
 
 		if (copy_to_user(argp, &create, sizeof(create)))
 			WARN_ON(1);
@@ -724,10 +723,16 @@ case IOCTL_KGSL_GPU_COMMAND: {
 
 	submit->user_fence = dma_fence_get(&submit->base.s_fence->finished);
 
-	WARN_ON(cmd.timestamp < queue->timestamp);
+	if (queue->kgsl_flags & KGSL_CONTEXT_USER_GENERATED_TS) {
+		WARN_ON(cmd.timestamp < queue->timestamp);
 
-	submit->timestamp = cmd.timestamp;
-	queue->timestamp = cmd.timestamp;
+		submit->timestamp = cmd.timestamp;
+		queue->timestamp = cmd.timestamp;
+	} else {
+		queue->timestamp++;
+		cmd.timestamp = queue->timestamp;
+		submit->timestamp = cmd.timestamp;
+	}
 
 	msm_gem_submit_get(submit);
 	drm_sched_entity_push_job(&submit->base);
