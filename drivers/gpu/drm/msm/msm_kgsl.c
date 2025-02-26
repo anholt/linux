@@ -297,9 +297,11 @@ static int kgsl_alloc(struct drm_file *file_priv, struct kgsl_gpuobj_alloc *allo
 		return -EINVAL;
 	}
 
-	if (flags.mem_align < 12 || flags.mem_align > 20) {
-		dev_warn(dev->dev, "unexpected mem_align: %d\n", flags.mem_align);
-		return -EINVAL;
+	if (flags.mem_align < 12) {
+		flags.mem_align = 12;
+	} else if (flags.mem_align > 20) {
+		dev_warn(dev->dev, "alignment too high, clamping: %d\n", flags.mem_align);
+		flags.mem_align = 20;
 	}
 
 	//if (flags.cache_mode == KGSL_CACHEMODE_WRITETHROUGH || flags.cache_mode == KGSL_CACHEMODE_WRITEBACK)
