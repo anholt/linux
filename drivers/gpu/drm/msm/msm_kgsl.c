@@ -1,3 +1,4 @@
+#include "adreno/adreno_gpu.h"
 #include <linux/file.h>
 #include <linux/sync_file.h>
 #include <linux/uaccess.h>
@@ -387,7 +388,7 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		union {
 			u32 val;
-			u64 gmem_vaddr;
+			u64 val64;
 			struct kgsl_ucode_version ucode;
 			struct kgsl_qtimer_prop qtimer;
 			struct kgsl_qdss_stm_prop qdss;
@@ -416,7 +417,9 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			prop.shadow.flags = KGSL_FLAGS_INITIALIZED | KGSL_FLAGS_PER_CONTEXT_TIMESTAMPS;
 		} break;
 		case KGSL_PROP_UCHE_GMEM_VADDR: {
-			prop.gmem_vaddr = 0;
+			uint32_t sz = 0;
+			if (adreno_get_param(gpu, ctx, MSM_PARAM_GMEM_BASE, &prop.val64, &sz) != 0)
+				return -EINVAL;
 		} break;
 		case KGSL_PROP_UCODE_VERSION: {
 			prop.ucode.pfp = 0x01740159; // XXX read from FW
@@ -446,8 +449,20 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				KGSL_CTX_STAT_NO_ERROR : KGSL_CTX_STAT_INNOCENT_CONTEXT_RESET_EXT;
 			to_msm_vm(ctx->vm)->kgsl_last_queried_faults = to_msm_vm(ctx->vm)->faults;
 		} break;
+		case KGSL_PROP_GPU_VA64_SIZE : {
+			uint32_t sz = 0;
+			if (adreno_get_param(gpu, ctx, MSM_PARAM_VA_SIZE, &prop.val64, &sz) != 0)
+				return -EINVAL;
+		} break;
+		case KGSL_PROP_UCHE_TRAP_BASE: {
+			uint32_t sz = 0;
+			if (adreno_get_param(gpu, ctx, MSM_PARAM_UCHE_TRAP_BASE, &prop.val64, &sz) != 0)
+				return -EINVAL;
+			break;
+		}
+		case KGSL_PROP_GPU_SECURE_VA_INUSE: { prop.val = 0; } break;
 		default:
-			DRM_DEV_ERROR(dev->dev, "TODO: get prop %d\n", get_prop.type);
+			DRM_DEV_ERROR(dev->dev, "TODO: get prop 0x%x\n", get_prop.type);
 			return -ENODEV;
 		}
 
@@ -456,6 +471,21 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_to_user(get_prop.value, &prop, get_prop.sizebytes))
 				return -EFAULT;
 		return 0;
+	}
+	case IOCTL_KGSL_SETPROPERTY: {
+		struct kgsl_device_getproperty set_prop;
+
+		if (copy_from_user(&set_prop, argp, sizeof(set_prop)))
+			return -EFAULT;
+
+		switch (set_prop.type) {
+		case KGSL_PROP_PWR_CONSTRAINT:
+			/* power hint, can be ignored safely */
+			return 0;
+		default:
+			DRM_DEV_ERROR(dev->dev, "TODO: set prop 0x%x", set_prop.type);
+			return -EINVAL;
+		}
 	}
 	case IOCTL_KGSL_TIMESTAMP_EVENT: {
 		struct kgsl_timestamp_event event;
