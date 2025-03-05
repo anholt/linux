@@ -727,6 +727,11 @@ case IOCTL_KGSL_GPU_COMMAND: {
 	if (!queue)
 		return -EINVAL;
 
+	if (queue->kgsl_flags & KGSL_CONTEXT_USER_GENERATED_TS)
+		trace_msm_kgsl_gpu_command(cmd.context_id, queue->timestamp + 1);
+	else
+		trace_msm_kgsl_gpu_command(cmd.context_id, cmd.timestamp);
+
 	submit = submit_create(dev, gpu, queue, 0, cmd.numcmds);
 	if (IS_ERR(submit))
 		return PTR_ERR(submit);
@@ -757,6 +762,8 @@ case IOCTL_KGSL_GPU_COMMAND: {
 				unsigned int irq_flags;
 
 				__copy_from_user(&timestamp_sync, (void __user*)sync.priv, sizeof(struct kgsl_cmd_syncpoint_timestamp));
+
+				trace_msm_kgsl_gpu_command_sync_timestamp(timestamp_sync.context_id, timestamp_sync.timestamp);
 
 				sync_queue = msm_submitqueue_get(ctx, timestamp_sync.context_id);
 
