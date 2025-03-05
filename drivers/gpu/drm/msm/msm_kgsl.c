@@ -701,9 +701,13 @@ case IOCTL_KGSL_GPUMEM_FREE_ID: {
 
 case IOCTL_KGSL_GPU_COMMAND: {
 	struct msm_gem_submit *submit;
+	struct msm_gpu_submitqueue *sync_queue;
 	struct kgsl_gpu_command cmd;
 	struct kgsl_command_object obj;
 	struct kgsl_command_syncpoint sync;
+	struct kgsl_cmd_syncpoint_timestamp timestamp_sync;
+	struct kgsl_fence *fence, *tmp;
+
 	u32 i;
 	int fence_fd, ret;
 	struct dma_fence *in_fence;
@@ -731,21 +735,79 @@ case IOCTL_KGSL_GPU_COMMAND: {
 
 	for (i = 0; i < cmd.numsyncs; i++) {
 		__copy_from_user(&sync, (void __user*)cmd.synclist + i * sizeof(sync), sizeof(sync));
-		if (sync.type != KGSL_CMD_SYNCPOINT_TYPE_FENCE) {
-			DRM_DEV_ERROR(dev->dev, "TODO: sync type %d", sync.type);
-			continue;
-		}
-		__copy_from_user(&fence_fd, (void __user*)sync.priv, sizeof(fence_fd));
 
-		in_fence = sync_file_get_fence(fence_fd);
-		if (!in_fence) {
-			DRM_DEV_ERROR(dev->dev, "TODO: sync_file_get_fence failed\n");
-			continue;
-		}
+		switch (sync.type) {
+			case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
+				__copy_from_user(&fence_fd, (void __user*)sync.priv, sizeof(fence_fd));
 
-		ret = drm_sched_job_add_dependency(&submit->base, in_fence);
-		if (ret)
-			DRM_DEV_ERROR(dev->dev, "TODO: drm_sched_job_add_dependency failed\n");
+				in_fence = sync_file_get_fence(fence_fd);
+				if (!in_fence) {
+					DRM_DEV_ERROR(dev->dev, "TODO: sync_file_get_fence failed\n");
+					continue;
+				}
+
+				ret = drm_sched_job_add_dependency(&submit->base, in_fence);
+				if (ret)
+					DRM_DEV_ERROR(dev->dev, "TODO: drm_sched_job_add_dependency failed\n");
+
+				break;
+			};
+			case KGSL_CMD_SYNCPOINT_TYPE_TIMESTAMP: {
+				struct kgsl_fence *new_fence;
+				unsigned int irq_flags;
+
+				__copy_from_user(&timestamp_sync, (void __user*)sync.priv, sizeof(struct kgsl_cmd_syncpoint_timestamp));
+
+				sync_queue = msm_submitqueue_get(ctx, timestamp_sync.context_id);
+
+				spin_lock_irqsave(&sync_queue->fence_lock, irq_flags);
+				in_fence = NULL;
+				list_for_each_entry_safe(fence, tmp, &sync_queue->fences, node) {
+					if (fence->timestamp == timestamp_sync.timestamp) {
+						in_fence = &fence->base;
+					}
+				}
+				if (in_fence) {
+					ret = drm_sched_job_add_dependency(&submit->base, in_fence);
+					if (ret)
+						DRM_DEV_ERROR(dev->dev, "TODO: drm_sched_job_add_dependency failed\n");
+				}
+				spin_unlock_irqrestore(&sync_queue->fence_lock, irq_flags);
+				if (!in_fence) {
+					new_fence = kzalloc(sizeof(*new_fence), GFP_KERNEL);
+					if (!new_fence)
+						return -ENOMEM;
+
+					spin_lock_init(&new_fence->lock);
+
+					dma_fence_init(&new_fence->base, &kgsl_fence_ops, &new_fence->lock,
+						dma_fence_context_alloc(1), 0);
+					in_fence = &new_fence->base;
+
+					new_fence->timestamp = timestamp_sync.timestamp;
+
+					spin_lock_irqsave(&sync_queue->fence_lock, irq_flags);
+
+					if (new_fence->timestamp <= sync_queue->timestamp_retired) {
+						/* timestamp was retired while creating the fence: */
+						dma_fence_signal(in_fence);
+						dma_fence_put(in_fence);
+					} else {
+						list_add_tail(&new_fence->node, &sync_queue->fences);
+						ret = drm_sched_job_add_dependency(&submit->base, in_fence);
+						if (ret)
+							DRM_DEV_ERROR(dev->dev, "TODO: drm_sched_job_add_dependency failed\n");
+					}
+					spin_unlock_irqrestore(&sync_queue->fence_lock, irq_flags);
+				}
+
+				break;
+			};
+			default: {
+				DRM_DEV_ERROR(dev->dev, "TODO: sync type %d", sync.type);
+				break;;
+			}
+		}
 	}
 
 	submit->nr_cmds = cmd.numcmds;
