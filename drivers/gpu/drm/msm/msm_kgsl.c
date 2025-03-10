@@ -75,6 +75,8 @@ struct kgsl_bind_work {
 	/* struct kgsl_bind_range range[]; */
 };
 
+void kgsl_bind_worker(struct work_struct *_work);
+
 void kgsl_bind_worker(struct work_struct *_work)
 {
 	struct kgsl_bind_work *work = container_of(_work, struct kgsl_bind_work, work);
@@ -112,6 +114,9 @@ void kgsl_bind_worker(struct work_struct *_work)
 	dma_fence_signal(&work->fence);
 	dma_fence_put(&work->fence);
 }
+
+
+int kgsl_work_add_bind(struct drm_file *file_priv, void **work_ptr, void *work_end, struct kgsl_gpu_aux_command_generic cmd);
 
 int kgsl_work_add_bind(struct drm_file *file_priv, void **work_ptr, void *work_end, struct kgsl_gpu_aux_command_generic cmd)
 {
@@ -198,6 +203,8 @@ fail:
 	return ret;
 }
 
+int kgsl_work_add_timeline(struct drm_file *file_priv, struct dma_fence *fence, struct kgsl_gpu_aux_command_generic cmd);
+
 int kgsl_work_add_timeline(struct drm_file *file_priv, struct dma_fence *fence, struct kgsl_gpu_aux_command_generic cmd)
 {
 	struct kgsl_gpu_aux_command_timeline timeline;
@@ -241,6 +248,8 @@ fail:
 }
 
 #define KGSL_MEMSTORE_TOKEN_ADDRESS 0xfffff000u
+int kgsl_mmap(struct drm_file *file_priv, struct drm_device *dev, struct vm_area_struct *vma);
+
 int kgsl_mmap(struct drm_file *file_priv, struct drm_device *dev, struct vm_area_struct *vma)
 {
 	struct msm_drm_private *priv = dev->dev_private;
@@ -339,6 +348,8 @@ static int kgsl_alloc(struct drm_file *file_priv, struct kgsl_gpuobj_alloc *allo
 
 	return 0;
 }
+
+long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -737,13 +748,15 @@ case IOCTL_KGSL_GPU_COMMAND: {
 		return PTR_ERR(submit);
 
 	mutex_lock(&queue->lock);
+	
+	unsigned long retval;
 
 	for (i = 0; i < cmd.numsyncs; i++) {
-		__copy_from_user(&sync, (void __user*)cmd.synclist + i * sizeof(sync), sizeof(sync));
+		retval = __copy_from_user(&sync, (void __user*)cmd.synclist + i * sizeof(sync), sizeof(sync));
 
 		switch (sync.type) {
 			case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
-				__copy_from_user(&fence_fd, (void __user*)sync.priv, sizeof(fence_fd));
+				retval = __copy_from_user(&fence_fd, (void __user*)sync.priv, sizeof(fence_fd));
 
 				in_fence = sync_file_get_fence(fence_fd);
 				if (!in_fence) {
@@ -759,9 +772,9 @@ case IOCTL_KGSL_GPU_COMMAND: {
 			};
 			case KGSL_CMD_SYNCPOINT_TYPE_TIMESTAMP: {
 				struct kgsl_fence *new_fence;
-				unsigned int irq_flags;
+				unsigned long irq_flags;
 
-				__copy_from_user(&timestamp_sync, (void __user*)sync.priv, sizeof(struct kgsl_cmd_syncpoint_timestamp));
+				retval = __copy_from_user(&timestamp_sync, (void __user*)sync.priv, sizeof(struct kgsl_cmd_syncpoint_timestamp));
 
 				trace_msm_kgsl_gpu_command_sync_timestamp(timestamp_sync.context_id, timestamp_sync.timestamp);
 
@@ -819,7 +832,7 @@ case IOCTL_KGSL_GPU_COMMAND: {
 
 	submit->nr_cmds = cmd.numcmds;
 	for (i = 0; i < cmd.numcmds; i++) {
-		__copy_from_user(&obj, (void __user*)cmd.cmdlist + i * sizeof(obj), sizeof(obj));
+		retval = __copy_from_user(&obj, (void __user*)cmd.cmdlist + i * sizeof(obj), sizeof(obj));
 		submit->cmd[i].type = MSM_SUBMIT_CMD_BUF;
 		submit->cmd[i].size = obj.size >> 2;
 		submit->cmd[i].iova = obj.gpuaddr;
