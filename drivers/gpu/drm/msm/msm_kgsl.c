@@ -749,14 +749,18 @@ case IOCTL_KGSL_GPU_COMMAND: {
 
 	mutex_lock(&queue->lock);
 	
-	unsigned long retval;
-
 	for (i = 0; i < cmd.numsyncs; i++) {
-		retval = __copy_from_user(&sync, (void __user*)cmd.synclist + i * sizeof(sync), sizeof(sync));
+		if (__copy_from_user(&sync, (void __user*)cmd.synclist + i * sizeof(sync), sizeof(sync))) {
+			WARN_ON(1);
+			continue;
+		}
 
 		switch (sync.type) {
 			case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
-				retval = __copy_from_user(&fence_fd, (void __user*)sync.priv, sizeof(fence_fd));
+				if (__copy_from_user(&fence_fd, (void __user*)sync.priv, sizeof(fence_fd))) {
+					WARN_ON(1);
+					continue;
+				}
 
 				in_fence = sync_file_get_fence(fence_fd);
 				if (!in_fence) {
@@ -774,7 +778,10 @@ case IOCTL_KGSL_GPU_COMMAND: {
 				struct kgsl_fence *new_fence;
 				unsigned long irq_flags;
 
-				retval = __copy_from_user(&timestamp_sync, (void __user*)sync.priv, sizeof(struct kgsl_cmd_syncpoint_timestamp));
+				if (__copy_from_user(&timestamp_sync, (void __user*)sync.priv, sizeof(struct kgsl_cmd_syncpoint_timestamp))) {
+					WARN_ON(1);
+					continue;
+				}
 
 				trace_msm_kgsl_gpu_command_sync_timestamp(timestamp_sync.context_id, timestamp_sync.timestamp);
 
@@ -832,7 +839,10 @@ case IOCTL_KGSL_GPU_COMMAND: {
 
 	submit->nr_cmds = cmd.numcmds;
 	for (i = 0; i < cmd.numcmds; i++) {
-		retval = __copy_from_user(&obj, (void __user*)cmd.cmdlist + i * sizeof(obj), sizeof(obj));
+		if (__copy_from_user(&obj, (void __user*)cmd.cmdlist + i * sizeof(obj), sizeof(obj))) {
+			WARN_ON(1);
+			continue;
+		}
 		submit->cmd[i].type = MSM_SUBMIT_CMD_BUF;
 		submit->cmd[i].size = obj.size >> 2;
 		submit->cmd[i].iova = obj.gpuaddr;
