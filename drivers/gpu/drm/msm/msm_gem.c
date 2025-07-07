@@ -439,13 +439,15 @@ static struct drm_gpuva *get_vma_locked(struct drm_gem_object *obj,
 {
 	struct msm_gem_object *msm_obj = to_msm_bo(obj);
 	struct drm_gpuva *vma;
+	uint32_t align;
 
 	msm_gem_assert_locked(obj);
 
 	vma = lookup_vma(obj, vm);
 
 	if (!vma) {
-		vma = msm_gem_vma_new(vm, obj, (msm_obj->flags >> 20) & 0x3f, 0, range_start, range_end);
+		align = msm_obj->align < PAGE_SIZE ? PAGE_SIZE : msm_obj->align;
+		vma = msm_gem_vma_new(vm, obj, align, 0, range_start, range_end);
 	} else {
 		GEM_WARN_ON(vma->va.addr < range_start);
 		GEM_WARN_ON((vma->va.addr + obj->size) > range_end);

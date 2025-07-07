@@ -198,6 +198,8 @@ struct msm_gem_object {
 
 	uint32_t flags;
 
+	uint32_t align;
+
 	/**
 	 * madv: are the backing pages purgeable?
 	 *

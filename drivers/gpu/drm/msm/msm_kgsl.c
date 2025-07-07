@@ -316,7 +316,6 @@ static int kgsl_alloc(struct drm_file *file_priv, struct kgsl_gpuobj_alloc *allo
 
 	//if (flags.cache_mode == KGSL_CACHEMODE_WRITETHROUGH || flags.cache_mode == KGSL_CACHEMODE_WRITEBACK)
 	//	msm_flags = flags.iocoherent ? MSM_BO_CACHED_COHERENT : MSM_BO_CACHED;
-	msm_flags |= flags.mem_align << 20;
 
 	if (msm_flags == MSM_BO_CACHED && 0) {
 		dev_warn(dev->dev, "forced iocoherent because cache sync isn't implemented\n");
@@ -337,6 +336,9 @@ static int kgsl_alloc(struct drm_file *file_priv, struct kgsl_gpuobj_alloc *allo
 		obj = msm_gem_new(dev, size, msm_flags);
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);
+
+	struct msm_gem_object *msm_obj = to_msm_bo(obj);
+	msm_obj->align = flags.mem_align;
 
 	int ret = drm_gem_handle_create(file_priv, obj, &alloc->id);
 	drm_gem_object_put(obj);
