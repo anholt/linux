@@ -4,6 +4,7 @@
  * Author: Rob Clark <robdclark@gmail.com>
  */
 
+#include "adreno/adreno_gpu.h"
 #include "msm_gpu.h"
 #include "msm_gpu_trace.h"
 
@@ -302,6 +303,8 @@ void msm_devfreq_active(struct msm_gpu *gpu)
 	if (!has_devfreq(gpu))
 		return;
 
+	if (to_adreno_gpu(gpu)->info->quirks & ADRENO_QUIRK_IFPC)
+		return;
 	/*
 	 * Cancel any pending transition to idle frequency:
 	 */
@@ -370,6 +373,9 @@ void msm_devfreq_idle(struct msm_gpu *gpu)
 	struct msm_gpu_devfreq *df = &gpu->devfreq;
 
 	if (!has_devfreq(gpu))
+		return;
+
+	if (to_adreno_gpu(gpu)->info->quirks & ADRENO_QUIRK_IFPC)
 		return;
 
 	msm_hrtimer_queue_work(&df->idle_work, ms_to_ktime(1),
