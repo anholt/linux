@@ -162,8 +162,9 @@ void msm_devfreq_init(struct msm_gpu *gpu)
 	 * Relax the tunings when IFPC is supported because there is negligible latency in
 	 * switching power state
 	 */
+	//gabe: change upthreshold based upon testing to be more aggressive
 	if (to_adreno_gpu(gpu)->info->quirks & ADRENO_QUIRK_IFPC)
-		priv->gpu_devfreq_config.upthreshold = 90;
+		priv->gpu_devfreq_config.upthreshold = 40;
 
 	mutex_init(&df->lock);
 	df->suspended = true;
