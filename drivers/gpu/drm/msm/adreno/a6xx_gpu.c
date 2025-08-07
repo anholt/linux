@@ -22,9 +22,9 @@ static u64 read_gmu_ao_counter(struct a6xx_gpu *a6xx_gpu)
 	u64 count_hi, count_lo, temp;
 
 	do {
-		count_hi = gmu_read(&a6xx_gpu->gmu, REG_A6XX_GMU_ALWAYS_ON_COUNTER_H);
-		count_lo = gmu_read(&a6xx_gpu->gmu, REG_A6XX_GMU_ALWAYS_ON_COUNTER_L);
-		temp = gmu_read(&a6xx_gpu->gmu, REG_A6XX_GMU_ALWAYS_ON_COUNTER_H);
+		count_hi = gmu_read(&a6xx_gpu->gmu, 0x5081);
+		count_lo = gmu_read(&a6xx_gpu->gmu, 0x5080);
+		temp = gmu_read(&a6xx_gpu->gmu, 0x5081);
 	} while (unlikely(count_hi != temp));
 
 	return (count_hi << 32) | count_lo;
