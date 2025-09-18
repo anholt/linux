@@ -284,6 +284,19 @@ struct adreno_platform_config {
 	__ret;                                             \
 })
 
+#define spin_until2(X) ({                                   \
+	int __ret = -ETIMEDOUT;                            \
+	unsigned long __t = jiffies + ADRENO_IDLE_TIMEOUT; \
+	do {                                               \
+		if (X) {                                   \
+			__ret = 0;                         \
+			break;                             \
+		}                                      \
+		usleep_range(25, 250);                 \
+	} while (time_before(jiffies, __t));               \
+	__ret;                                             \
+})
+
 static inline uint8_t adreno_patchid(const struct adreno_gpu *gpu)
 {
 	/* It is probably ok to assume legacy "adreno_rev" format

@@ -254,7 +254,7 @@ static bool a6xx_gmu_check_idle_level(struct a6xx_gmu *gmu)
 /* Wait for the GMU to get to its most idle state */
 int a6xx_gmu_wait_for_idle(struct a6xx_gmu *gmu)
 {
-	return spin_until(a6xx_gmu_check_idle_level(gmu));
+	return spin_until2(a6xx_gmu_check_idle_level(gmu));
 }
 
 static int a6xx_gmu_start(struct a6xx_gmu *gmu)
