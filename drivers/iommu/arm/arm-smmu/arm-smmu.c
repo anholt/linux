@@ -1633,6 +1633,19 @@ static int arm_smmu_def_domain_type(struct device *dev)
 	return 0;
 }
 
+static bool arm_smmu_is_attach_deferred(struct device *dev)
+{
+	struct device_node *np = of_node_get(dev->of_node);
+	bool defer = false;
+
+	if (np) {
+		defer = of_property_present(np, "iommu-defer-attach");
+		of_node_put(np);
+	}
+
+	return defer;
+}
+
 static const struct iommu_ops arm_smmu_ops = {
 	.identity_domain	= &arm_smmu_identity_domain,
 	.blocked_domain		= &arm_smmu_blocked_domain,
@@ -1645,6 +1658,7 @@ static const struct iommu_ops arm_smmu_ops = {
 	.of_xlate		= arm_smmu_of_xlate,
 	.get_resv_regions	= arm_smmu_get_resv_regions,
 	.def_domain_type	= arm_smmu_def_domain_type,
+	.is_attach_deferred	= arm_smmu_is_attach_deferred,
 	.owner			= THIS_MODULE,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev		= arm_smmu_attach_dev,
