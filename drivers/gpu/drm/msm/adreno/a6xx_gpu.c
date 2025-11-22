@@ -715,7 +715,7 @@ static void a6xx_set_hwcg(struct msm_gpu *gpu, bool state)
 
 			if (gpu_poll_timeout(gpu, REG_A7XX_RBBM_CGC_P2S_STATUS, val,
 					     val & A7XX_RBBM_CGC_P2S_STATUS_TXDONE, 1, 10)) {
-				dev_err(&gpu->pdev->dev, "RBBM_CGC_P2S_STATUS TXDONE Poll failed\n");
+				//dev_err(&gpu->pdev->dev, "RBBM_CGC_P2S_STATUS TXDONE Poll failed\n");
 				return;
 			}
 
