@@ -31,14 +31,15 @@ TRACE_EVENT(msm_gpu_submit,
 );
 
 TRACE_EVENT(msm_gpu_submit_flush,
-	    TP_PROTO(struct msm_gem_submit *submit, u64 ticks),
-	    TP_ARGS(submit, ticks),
+	    TP_PROTO(struct msm_gem_submit *submit, u64 ticks, u64 ifpc_latency),
+	    TP_ARGS(submit, ticks, ifpc_latency),
 	    TP_STRUCT__entry(
 		    __field(pid_t, pid)
 		    __field(u32, id)
 		    __field(u32, ringid)
 		    __field(u32, seqno)
 		    __field(u64, ticks)
+		    __field(u64, ifpc_latency)
 		    ),
 	    TP_fast_assign(
 		    __entry->pid = pid_nr(submit->pid);
@@ -46,10 +47,11 @@ TRACE_EVENT(msm_gpu_submit_flush,
 		    __entry->ringid = submit->ring->id;
 		    __entry->seqno = submit->seqno;
 		    __entry->ticks = ticks;
+		    __entry->ifpc_latency = ifpc_latency;
 		    ),
-	    TP_printk("id=%d pid=%d ring=%d:%d ticks=%lld",
+	    TP_printk("id=%d pid=%d ring=%d:%d ticks=%lld ifpc_latency=%lld",
 		    __entry->id, __entry->pid, __entry->ringid, __entry->seqno,
-		    __entry->ticks)
+		    __entry->ticks, __entry->ifpc_latency)
 );
 
 
