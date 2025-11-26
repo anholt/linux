@@ -203,7 +203,7 @@ void a6xx_preempt_irq(struct msm_gpu *gpu)
 
 	set_preempt_state(a6xx_gpu, PREEMPT_NONE);
 
-	if (!refcount_read(&a6xx_gpu->base.base.sysprof_active))
+	if (refcount_read(&a6xx_gpu->base.base.sysprof_active) <= 1)
 		a6xx_preempt_keepalive_vote(gpu, false);
 
 	trace_msm_gpu_preemption_irq(a6xx_gpu->cur_ring->id);
