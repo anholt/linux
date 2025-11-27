@@ -599,14 +599,30 @@ static void _dpu_crtc_complete_flip(struct drm_crtc *crtc)
 	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	unsigned long flags;
+	u64 cur_seq;
 
 	spin_lock_irqsave(&dev->event_lock, flags);
 	if (dpu_crtc->event) {
 		DRM_DEBUG_VBL("%s: send event: %p\n", dpu_crtc->name,
 			      dpu_crtc->event);
 		trace_dpu_crtc_complete_flip(DRMID(crtc));
-		drm_crtc_send_vblank_event(crtc, dpu_crtc->event);
-		dpu_crtc->event = NULL;
+		
+		cur_seq = drm_crtc_vblank_count(crtc);
+		WARN(dpu_crtc->commit_seq == 0,
+		     "crtc%d commit_seq is 0 when processing flip event\n",
+		     crtc->base.id);
+		if (cur_seq > dpu_crtc->commit_seq) {
+			/* already past the commit seq, send immediately */
+			drm_crtc_send_vblank_event(crtc, dpu_crtc->event);
+			dpu_crtc->event = NULL;
+		} else if (drm_crtc_vblank_get(crtc) != 0) {
+			/* failed to get vblank ref, send immediately */
+			drm_crtc_send_vblank_event(crtc, dpu_crtc->event);
+			dpu_crtc->event = NULL;
+		} else {
+			/* delay sending until next vblank */
+			dpu_crtc->flip_event_pending = true;
+		}
 	}
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 }
@@ -644,6 +660,9 @@ enum dpu_intf_mode dpu_crtc_get_intf_mode(struct drm_crtc *crtc)
 void dpu_crtc_vblank_callback(struct drm_crtc *crtc)
 {
 	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
+	struct drm_device *dev = crtc->dev;
+	unsigned long flags;
+	u64 cur_seq;
 
 	/* keep statistics on vblank callback - with auto reset via debugfs */
 	if (ktime_compare(dpu_crtc->vblank_cb_time, ktime_set(0, 0)) == 0)
@@ -654,7 +673,21 @@ void dpu_crtc_vblank_callback(struct drm_crtc *crtc)
 	dpu_crtc_get_crc(crtc);
 
 	drm_crtc_handle_vblank(crtc);
+	cur_seq = drm_crtc_vblank_count(crtc);
 	trace_dpu_crtc_vblank_cb(DRMID(crtc));
+
+	spin_lock_irqsave(&dev->event_lock, flags);
+	if (dpu_crtc->event && dpu_crtc->flip_event_pending &&
+	    cur_seq > dpu_crtc->commit_seq) {
+		WARN(dpu_crtc->commit_seq == 0,
+		     "crtc%d commit_seq is 0 when processing vblank flip event\n",
+		     crtc->base.id);
+		drm_crtc_send_vblank_event(crtc, dpu_crtc->event);
+		dpu_crtc->event = NULL;
+		dpu_crtc->flip_event_pending = false;
+		drm_crtc_vblank_put(crtc);
+	}
+	spin_unlock_irqrestore(&dev->event_lock, flags);
 }
 
 static void dpu_crtc_frame_event_work(struct kthread_work *work)
@@ -975,6 +1008,8 @@ static void dpu_crtc_atomic_flush(struct drm_crtc *crtc,
 	spin_lock_irqsave(&dev->event_lock, flags);
 	dpu_crtc->event = crtc->state->event;
 	crtc->state->event = NULL;
+	dpu_crtc->commit_seq = 0;
+	dpu_crtc->flip_event_pending = false;
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
 	/*
@@ -1088,8 +1123,10 @@ void dpu_crtc_commit_kickoff(struct drm_crtc *crtc)
 {
 	struct drm_encoder *encoder;
 	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
+	struct drm_device *dev = crtc->dev;
 	struct dpu_kms *dpu_kms = _dpu_crtc_get_kms(crtc);
 	struct dpu_crtc_state *cstate = to_dpu_crtc_state(crtc->state);
+	unsigned long flags;
 
 	/*
 	 * If no mixers has been allocated in dpu_crtc_atomic_check(),
@@ -1129,6 +1166,10 @@ void dpu_crtc_commit_kickoff(struct drm_crtc *crtc)
 			dpu_encoder_start_frame_done_timer(encoder);
 		}
 	}
+
+	spin_lock_irqsave(&dev->event_lock, flags);
+	dpu_crtc->commit_seq = drm_crtc_accurate_vblank_count(crtc);
+	spin_unlock_irqrestore(&dev->event_lock, flags);
 
 	if (atomic_inc_return(&dpu_crtc->frame_pending) == 1) {
 		/* acquire bandwidth and other resources */

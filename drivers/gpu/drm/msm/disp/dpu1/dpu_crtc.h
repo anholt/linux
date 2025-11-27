@@ -158,6 +158,8 @@ struct dpu_crtc {
 	char name[DPU_CRTC_NAME_SIZE];
 
 	struct drm_pending_vblank_event *event;
+	u64 commit_seq;
+	bool flip_event_pending;
 	u32 vsync_count;
 
 	u32 vblank_cb_count;
