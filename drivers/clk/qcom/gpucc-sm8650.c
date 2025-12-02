@@ -68,6 +68,7 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 			},
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_lucid_evo_ops,
+			.flags = CLK_IGNORE_UNUSED,
 		},
 	},
 };
@@ -305,7 +306,7 @@ static struct clk_branch gpu_cc_cx_gmu_clk = {
 				&gpu_cc_gmu_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_IGNORE_UNUSED,
 			.ops = &clk_branch2_aon_ops,
 		},
 	},
@@ -372,6 +373,7 @@ static struct clk_branch gpu_cc_gx_gfx3d_clk = {
 		.hw.init = &(struct clk_init_data){
 			.name = "gpu_cc_gx_gfx3d_clk",
 			.ops = &clk_branch2_ops,
+			.flags = CLK_IGNORE_UNUSED,
 		},
 	},
 };
