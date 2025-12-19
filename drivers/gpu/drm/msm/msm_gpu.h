@@ -94,6 +94,8 @@ struct msm_gpu_funcs {
 	bool (*progress)(struct msm_gpu *gpu, struct msm_ringbuffer *ring);
 	void (*sysprof_setup)(struct msm_gpu *gpu);
 	int (*get_ctx_timestamp)(struct msm_ringbuffer *ring, uint64_t *value);
+	void (*reset_memstore)(struct msm_gpu *gpu, uint32_t ctx_id);
+
 };
 
 /* Additional state for iommu faults: */

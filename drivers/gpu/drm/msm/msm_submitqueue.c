@@ -200,8 +200,6 @@ get_sched_entity(struct msm_context *ctx, struct msm_ringbuffer *ring,
 	return ctx->entities[idx];
 }
 
-void a7xx_reset_memstore(struct msm_gpu *gpu, uint32_t ctx_id);
-
 int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 		u32 prio, u32 flags, u32 *id)
 {
@@ -313,7 +311,8 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 		return -ENOMEM;
 	}
 
-	a7xx_reset_memstore(gpu, queue->id);
+	if (gpu->funcs->reset_memstore)
+		gpu->funcs->reset_memstore(gpu, queue->id);
 
 	if (id)
 		*id = queue->id;
