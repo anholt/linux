@@ -256,6 +256,10 @@ int kgsl_mmap(struct drm_file *file_priv, struct drm_device *dev, struct vm_area
 	struct msm_gpu *gpu = priv->gpu;
 	struct drm_gem_object *obj;
 	int ret;
+	struct adreno_platform_config *config = gpu->pdev->dev.platform_data;
+
+	if (config->info->family < ADRENO_7XX_GEN1)
+		return -ENOENT;
 
 	if ((vma->vm_pgoff << PAGE_SHIFT) == KGSL_MEMSTORE_TOKEN_ADDRESS)
 		return drm_gem_mmap_obj(a7xx_gpu_shadow_bo(gpu), KGSL_MEMSTORE_SIZE, vma);
