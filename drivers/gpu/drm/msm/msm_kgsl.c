@@ -257,8 +257,15 @@ int kgsl_mmap(struct drm_file *file_priv, struct drm_device *dev, struct vm_area
 	struct drm_gem_object *obj;
 	int ret;
 
-	if ((vma->vm_pgoff << PAGE_SHIFT) == KGSL_MEMSTORE_TOKEN_ADDRESS)
+	if ((vma->vm_pgoff << PAGE_SHIFT) == KGSL_MEMSTORE_TOKEN_ADDRESS) {
+		unsigned int vma_size = vma->vm_end - vma->vm_start;
+
+		if (vma->vm_flags & VM_WRITE)
+			return -EPERM;
+		if (vma_size != KGSL_MEMSTORE_SIZE)
+			return -EINVAL;
 		return drm_gem_mmap_obj(a7xx_gpu_shadow_bo(gpu), KGSL_MEMSTORE_SIZE, vma);
+	}
 
 	obj = drm_gem_object_lookup(file_priv, vma->vm_pgoff);
 	if (!obj)
