@@ -1162,6 +1162,13 @@ static void msm_gem_free_object(struct drm_gem_object *obj)
 		drm_exec_fini(&exec);     /* drop locks */
 	}
 
+	/* Reset any leaked pins (e.g. kgsl objects on abnormal process exit) */
+	if (msm_obj->pin_count) {
+		mutex_lock(&priv->lru.lock);
+		msm_obj->pin_count = 0;
+		mutex_unlock(&priv->lru.lock);
+	}
+
 	if (drm_gem_is_imported(obj)) {
 		GEM_WARN_ON(msm_obj->vaddr);
 
