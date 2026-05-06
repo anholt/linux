@@ -394,6 +394,17 @@ static void a6xx_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 	OUT_PKT4(ring, REG_A6XX_CP_SCRATCH(2), 1);
 	OUT_RING(ring, submit->seqno);
 
+	/* write the ctx timestamp (for kgsl memstore) */
+	if (a6xx_gpu->memstore_bo) {
+		u64 timestamp_iova = a6xx_gpu->memstore_iova +
+			KGSL_MEMSTORE_OFFSET(submit->queue->id, eoptimestamp);
+		OUT_PKT7(ring, CP_EVENT_WRITE, 4);
+		OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(CACHE_FLUSH_TS));
+		OUT_RING(ring, lower_32_bits(timestamp_iova));
+		OUT_RING(ring, upper_32_bits(timestamp_iova));
+		OUT_RING(ring, submit->timestamp);
+	}
+
 	/*
 	 * Execute a CACHE_FLUSH_TS event. This will ensure that the
 	 * timestamp is written to the memory and then triggers the interrupt
@@ -588,7 +599,7 @@ static void a7xx_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 	a6xx_gpu->last_seqno[ring->id] = submit->seqno;
 
 	/* write the ctx timestamp (for kgsl memstore) */
-	timestamp_iova = a6xx_gpu->shadow_iova + KGSL_MEMSTORE_OFFSET(submit->queue->id, eoptimestamp);
+	timestamp_iova = a6xx_gpu->memstore_iova + KGSL_MEMSTORE_OFFSET(submit->queue->id, eoptimestamp);
 	//OUT_PKT7(ring, CP_EVENT_WRITE, 4);
 	//OUT_RING(ring, CACHE_CLEAN | BIT(31) | BIT(27));
 	//OUT_RING(ring, lower_32_bits(timestamp_iova));
@@ -650,14 +661,14 @@ uint64_t a7xx_gpu_shadow_iova(struct msm_gpu *gpu)
 {
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
-	return a6xx_gpu->shadow_iova;
+	return a6xx_gpu->memstore_iova;
 }
 
 struct drm_gem_object *a7xx_gpu_shadow_bo(struct msm_gpu *gpu)
 {
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
-	return a6xx_gpu->shadow_bo;
+	return a6xx_gpu->memstore_bo;
 }
 
 static void a7xx_reset_memstore(struct msm_gpu *gpu, uint32_t ctx_id)
@@ -2848,6 +2859,7 @@ const struct adreno_gpu_funcs a6xx_gpu_funcs = {
 		.get_rptr = a6xx_get_rptr,
 		.progress = a6xx_progress,
 		.get_ctx_timestamp = a6xx_get_ctx_timestamp,
+		.reset_memstore = a7xx_reset_memstore,
 	},
 	.init = a6xx_gpu_init,
 	.get_timestamp = a6xx_gmu_get_timestamp,
@@ -2881,6 +2893,7 @@ const struct adreno_gpu_funcs a6xx_gmuwrapper_funcs = {
 		.get_rptr = a6xx_get_rptr,
 		.progress = a6xx_progress,
 		.get_ctx_timestamp = a6xx_get_ctx_timestamp,
+		.reset_memstore = a7xx_reset_memstore,
 	},
 	.init = a6xx_gpu_init,
 	.get_timestamp = a6xx_get_timestamp,
