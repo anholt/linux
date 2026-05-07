@@ -752,7 +752,7 @@ case IOCTL_KGSL_GPU_COMMAND: {
 	else
 		trace_msm_kgsl_gpu_command(cmd.context_id, cmd.timestamp);
 
-	submit = submit_create(dev, gpu, queue, 0, cmd.numcmds);
+	submit = submit_create(dev, gpu, queue, cmd.numcmds, cmd.numcmds);
 	if (IS_ERR(submit))
 		return PTR_ERR(submit);
 
@@ -848,6 +848,8 @@ case IOCTL_KGSL_GPU_COMMAND: {
 
 	submit->nr_cmds = cmd.numcmds;
 	for (i = 0; i < cmd.numcmds; i++) {
+		struct drm_gem_object *cmd_obj;
+
 		if (__copy_from_user(&obj, (void __user*)cmd.cmdlist + i * sizeof(obj), sizeof(obj))) {
 			WARN_ON(1);
 			continue;
@@ -855,6 +857,19 @@ case IOCTL_KGSL_GPU_COMMAND: {
 		submit->cmd[i].type = MSM_SUBMIT_CMD_BUF;
 		submit->cmd[i].size = obj.size >> 2;
 		submit->cmd[i].iova = obj.gpuaddr;
+		if (obj.offset)
+			DRM_DEV_ERROR(dev->dev, "TODO: non-zero cmd buffer offset %lld\n", obj.offset);
+
+		cmd_obj = drm_gem_object_lookup(file_priv, obj.id);
+		if (cmd_obj) {
+			submit->bos[submit->nr_bos].obj = cmd_obj;
+			submit->bos[submit->nr_bos].iova = obj.gpuaddr;
+			submit->bos[submit->nr_bos].flags = MSM_SUBMIT_BO_READ | MSM_SUBMIT_BO_DUMP;
+			submit->nr_bos++;
+			drm_gem_object_put(cmd_obj);
+		} else {
+			DRM_DEV_ERROR(dev->dev, "cmd buffer obj %d not found\n", obj.id);
+		}
 	}
 
 	drm_sched_job_arm(&submit->base);
