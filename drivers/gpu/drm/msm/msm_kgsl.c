@@ -370,6 +370,7 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct msm_gpu_submitqueue *queue;
 	struct drm_gem_object *obj;
 	struct drm_gpuvm *vm = msm_context_vm(dev, ctx);
+	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	unsigned long flags;
 	int ret;
 
@@ -418,13 +419,13 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		switch (get_prop.type) {
 		case KGSL_PROP_DEVICE_INFO: {
-			static const struct kgsl_devinfo prop = {
+			struct kgsl_devinfo prop = {
 				.device_id = 1, /* KGSL_DEVICE_3D0 + 1 ? */
-				.chip_id = 0x43051401,
+				.chip_id = adreno_gpu->chip_id,
 				.mmu_enabled = 1,
-				.gmem_gpubaseaddr = 0,
-				.gpu_id = 750,
-				.gmem_sizebytes = SZ_1M * 3,
+				.gmem_gpubaseaddr = adreno_gpu->info->family >= ADRENO_6XX_GEN4 ? 0 : 0x100000,
+				.gpu_id = adreno_gpu->info->revn,
+				.gmem_sizebytes = adreno_gpu->info->gmem,
 			};
 			if (get_prop.sizebytes != sizeof(prop))
 				return -EINVAL;
@@ -445,7 +446,7 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			prop.ucode.pfp = 0x01740159; // XXX read from FW
 			prop.ucode.pm4 = 0;
 		} break;
-		case KGSL_PROP_HIGHEST_BANK_BIT: { prop.val = 16; } break;
+		case KGSL_PROP_HIGHEST_BANK_BIT: { prop.val = adreno_gpu->ubwc_config->highest_bank_bit; } break;
 		case KGSL_PROP_DEVICE_BITNESS: { prop.val = 48; } break;
 		case KGSL_PROP_DEVICE_QDSS_STM: {
 		} break;
@@ -459,8 +460,8 @@ long kgsl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		case KGSL_PROP_SECURE_CTXT_SUPPORT: { prop.val = 0; } break;
 		case KGSL_PROP_SPEED_BIN: { prop.val = 0; } break;
 		case KGSL_PROP_GAMING_BIN: { prop.val = 0; } break;
-		case KGSL_PROP_GPU_MODEL: { strcpy(prop.model.gpu_model, "Adreno750v2"); } break;
-		case KGSL_PROP_VK_DEVICE_ID: { prop.val = 0x43051401; } break;
+		case KGSL_PROP_GPU_MODEL: { strcpy(prop.model.gpu_model, "Adreno Unknown"); } break;
+		case KGSL_PROP_VK_DEVICE_ID: { prop.val = adreno_gpu->chip_id; } break;
 		case KGSL_PROP_IS_LPAC_ENABLED: { prop.val = 0; } break;
 		case KGSL_PROP_IS_RAYTRACING_ENABLED: { prop.val = 1; } break;
 		case KGSL_PROP_IS_FASTBLEND_ENABLED: { prop.val = 1; } break;
